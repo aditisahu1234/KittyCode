@@ -1,1 +1,3 @@
 # SecureConnect Frontend
+
+Initialized Project
