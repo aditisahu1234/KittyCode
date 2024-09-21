@@ -1,0 +1,21 @@
+# Dependencies
+node_modules/
+   
+# Environment files
+*.env
+   
+# Build outputs
+build/
+dist/
+   
+# IDE files
+.vscode/
+.idea/
+   
+# macOS specific
+.DS_Store
+.AppleDouble
+.LSOverride
+
+
+
