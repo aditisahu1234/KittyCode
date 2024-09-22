@@ -1,25 +1,21 @@
 const express = require('express');
+const connectDB = require('./config/db');
+const dotenv = require('dotenv');
 const bodyParser = require('body-parser');
-const morgan = require('morgan');  // Import morgan for logging
+
+// Load environment variables
+dotenv.config();
 
 const app = express();
 app.use(bodyParser.json());
-app.use(morgan('dev'));  // Enable request logging
 
-// Simple login route
-app.post('/login', (req, res) => {
-  const { email, password } = req.body;
-  console.log('Login Request:', req.body);  // Log request body
+// Connect to MongoDB
+connectDB();
 
-  // Dummy login logic
-  if (email === 'test@example.com' && password === 'password') {
-    return res.json({ success: true, message: 'Login successful' });
-  } else {
-    return res.status(401).json({ success: false, message: 'Invalid credentials' });
-  }
-});
+// Define Routes
+app.use('/api/auth', require('./routes/authRoutes'));
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
