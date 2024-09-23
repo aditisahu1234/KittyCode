@@ -10,8 +10,8 @@ export default function Index() {
         alignItems: "center",
       }}
     >
-      <Link href={'/splash'}>Go to splash</Link>
-      <Text>Edit app/index.tsx to edit this screen.</Text>
+      <Link href={'/splash'}> <b>Splash</b> </Link>
+      <Link href={'/rough'}> <b>Rough</b> </Link>
     </View>
   );
 }

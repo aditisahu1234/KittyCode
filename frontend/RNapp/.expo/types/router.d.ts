@@ -6,8 +6,7 @@ export * from 'expo-router';
 declare module 'expo-router' {
   export namespace ExpoRouter {
     export interface __routes<T extends string = string> extends Record<string, unknown> {
-      StaticRoutes: `/` | `/..\app-example\(tabs)\_layout` | `/..\app-example\+html` | `/..\app-example\+not-found` | `/..\app-example\_layout` | `/_sitemap` | `/splash` | `/splash\`;
-      StaticRoutes: `/(tabs)\_layout` | `/_sitemap` | `/splash`;
+      StaticRoutes: `/` | `/_sitemap` | `/account` | `/createaccount` | `/login` | `/rough` | `/splash`;
       DynamicRoutes: never;
       DynamicRouteTemplate: never;
     }
