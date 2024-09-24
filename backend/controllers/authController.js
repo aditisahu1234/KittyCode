@@ -1,3 +1,5 @@
+// authController.js
+
 const User = require('../models/userModel');
 const jwt = require('jsonwebtoken');
 
@@ -8,7 +10,7 @@ const generateToken = (id) => {
 
 // Register user
 exports.registerUser = async (req, res) => {
-  const { email, password } = req.body;
+  const { name, email, password } = req.body;
 
   try {
     // Check if user already exists
@@ -18,7 +20,7 @@ exports.registerUser = async (req, res) => {
     }
 
     // Create new user and save to database
-    user = new User({ email, password });
+    user = new User({ name, email, password });
     await user.save();
 
     // Create JWT token
