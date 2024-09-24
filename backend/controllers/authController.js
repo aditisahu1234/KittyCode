@@ -1,5 +1,3 @@
-// authController.js
-
 const User = require('../models/userModel');
 const jwt = require('jsonwebtoken');
 
@@ -33,7 +31,7 @@ exports.registerUser = async (req, res) => {
   }
 };
 
-// Login user
+// Login user and return username
 exports.loginUser = async (req, res) => {
   const { email, password } = req.body;
 
@@ -53,7 +51,8 @@ exports.loginUser = async (req, res) => {
     // Generate JWT token
     const token = generateToken(user._id);
 
-    res.json({ success: true, token, message: 'Login successful' });
+    // Return token and username
+    res.json({ success: true, token, username: user.name, message: 'Login successful' });
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: 'Server error' });

@@ -1,5 +1,3 @@
-// userModel.js
-
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 
@@ -18,6 +16,10 @@ const UserSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  friends: [{ 
+    type: mongoose.Schema.Types.ObjectId, 
+    ref: 'User',
+  }],
 });
 
 // Hash password before saving the user to the database
