@@ -9,8 +9,20 @@ const HomeScreen = () => {
 
   return (
     <SafeAreaView style={styles.container}>
+      <View style={styles.topBar}>
+        <TouchableOpacity style={styles.notificationButton}>
+          <AntDesign name="notification" size={24} color="#fff" />
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.profileButton}>
+          <AntDesign name="user" size={24} color="#fff" />
+        </TouchableOpacity>
+      </View>
       <View style={styles.searchContainer}>
-        <TextInput style={styles.searchInput} placeholder={`Search ${selectedTab}`} placeholderTextColor="#aaa" />
+        <TextInput
+          style={styles.searchInput}
+          placeholder={`Search ${selectedTab}`}
+          placeholderTextColor="#aaa"
+        />
         <AntDesign name="search1" size={20} color="#aaa" style={styles.searchIcon} />
       </View>
       <View style={styles.tabsContainer}>
@@ -41,13 +53,25 @@ const styles = StyleSheet.create({
     backgroundColor: '#616BFC',
     padding: 20,
   },
+  topBar: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingBottom: 10, // Added padding
+  },
+  notificationButton: {
+    padding: 10, // Added padding
+  },
+  profileButton: {
+    padding: 10, // Added padding
+  },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: '#fff',
     borderRadius: 30,
     padding: 10,
-    marginBottom: 20,
+    marginBottom: 20, // Adjusted margin for better spacing
   },
   searchInput: {
     flex: 1,
@@ -60,7 +84,7 @@ const styles = StyleSheet.create({
   },
   tabsContainer: {
     flexDirection: 'row',
-    marginBottom: 20,
+    marginBottom: 20, // Adjusted margin for better spacing
   },
   tab: {
     flex: 1,
