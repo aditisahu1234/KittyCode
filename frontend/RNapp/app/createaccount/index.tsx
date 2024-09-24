@@ -1,17 +1,52 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { useFonts } from 'expo-font';
 import { LinearGradient } from 'expo-linear-gradient';
+
+const BASE_URL = "https://f2c3-106-221-156-149.ngrok-free.app";
 
 export default function CreateAccountScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [loaded, error] = useFonts({
+  const [loaded] = useFonts({
     'Poppins-Regular': require('../../assets/fonts/Poppins-Regular.ttf'),
     'Poppins-SemiBold': require('../../assets/fonts/Poppins-SemiBold.ttf'),
   });
+
+
+  const handleCreateAccount = async () => {
+    if (password !== confirmPassword) {
+      Alert.alert('Error', 'Passwords do not match');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${BASE_URL}/api/auth/register`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ name, email, password }),
+      });
+
+      const data = await response.json();
+
+      if (data.success) {
+        Alert.alert('Success', 'Account created successfully');
+      } else {
+        Alert.alert('Error', data.message);
+      }
+    } catch (error) {
+      Alert.alert('Error', 'An error occurred. Please try again.');
+    }
+  };
+
+  if (!loaded) {
+    return <ActivityIndicator size="large" color="#0000ff" />;
+  }
+
   return (
     <View style={styles.container}>
       <Text style={styles.headerText}>Let's create your account!</Text>
@@ -52,10 +87,11 @@ export default function CreateAccountScreen() {
         onChangeText={setConfirmPassword}
       />
 
-      <LinearGradient style={styles.button} colors={["#FC80D1", "#C6FE4E"]}>
-        <Text style={styles.buttonText}>Create your account</Text>
-      </LinearGradient>
-
+      <TouchableOpacity onPress={handleCreateAccount}>
+        <LinearGradient style={styles.button} colors={["#FC80D1", "#C6FE4E"]}>
+          <Text style={styles.buttonText}>Create your account</Text>
+        </LinearGradient>
+      </TouchableOpacity>
     </View>
   );
 }
@@ -77,7 +113,7 @@ const styles = StyleSheet.create({
   },
   subText: {
     fontSize: 14,
-    fontFamily:"Poppins-Regular",
+    fontFamily: 'Poppins-Regular',
     color: '#ffffff',
     textAlign: 'center',
     marginBottom: 20,

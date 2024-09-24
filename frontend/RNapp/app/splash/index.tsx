@@ -4,6 +4,7 @@ import { View, Text, StyleSheet, Image, TouchableOpacity } from 'react-native';
 import { useFonts } from 'expo-font';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Link } from 'expo-router';
+// import { LinearGradient } from 'react-native-svg';
 
 export default function SplashScreen() {
   const [loaded, error] = useFonts({
@@ -22,7 +23,7 @@ export default function SplashScreen() {
         style={styles.brand}
         colors={["#FC80D1", "#C6FE4E"]}
       >
-        KittyCode
+        <Text>KittyCode</Text>
       </LinearGradient>
 
       <Text style={styles.description}>
@@ -49,7 +50,7 @@ export default function SplashScreen() {
         // start={{x:0.9, y:0.0}}
         // end={{x:1,y:0.5}} 
       >
-        <Link href={'/account'} style={styles.buttonText}>Get Started</Link>
+        <Link href={'/account'} style={styles.buttonText}><Text>Get Started</Text></Link>
       </LinearGradient>
     </View>
   );

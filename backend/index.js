@@ -2,18 +2,20 @@ const express = require('express');
 const connectDB = require('./config/db');
 const dotenv = require('dotenv');
 const bodyParser = require('body-parser');
+const authRoutes = require('./routes/authRoutes');
+const friendRoutes = require('./routes/friendRoutes');
 
-// Load environment variables
 dotenv.config();
+connectDB();
 
 const app = express();
 app.use(bodyParser.json());
 
-// Connect to MongoDB
-connectDB();
+// Auth Routes
+app.use('/api/auth', authRoutes);
 
-// Define Routes
-app.use('/api/auth', require('./routes/authRoutes'));
+// Friend Request Routes
+app.use('/api/friends', friendRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
