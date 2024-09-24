@@ -1,25 +1,23 @@
 const express = require('express');
+const connectDB = require('./config/db');
+const dotenv = require('dotenv');
 const bodyParser = require('body-parser');
-const morgan = require('morgan');  // Import morgan for logging
+const authRoutes = require('./routes/authRoutes');
+const friendRoutes = require('./routes/friendRoutes');
+
+dotenv.config();
+connectDB();
 
 const app = express();
 app.use(bodyParser.json());
-app.use(morgan('dev'));  // Enable request logging
 
-// Simple login route
-app.post('/login', (req, res) => {
-  const { email, password } = req.body;
-  console.log('Login Request:', req.body);  // Log request body
+// Auth Routes
+app.use('/api/auth', authRoutes);
 
-  // Dummy login logic
-  if (email === 'test@example.com' && password === 'password') {
-    return res.json({ success: true, message: 'Login successful' });
-  } else {
-    return res.status(401).json({ success: false, message: 'Invalid credentials' });
-  }
-});
+// Friend Request Routes
+app.use('/api/friends', friendRoutes);
 
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
 });
