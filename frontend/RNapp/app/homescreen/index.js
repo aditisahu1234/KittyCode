@@ -1,11 +1,21 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, SafeAreaView, Alert } from 'react-native';
 import { AntDesign } from '@expo/vector-icons';
+import { useLocalSearchParams } from 'expo-router';
 import Chats from '../chats';
 import Friends from '../friend';
 
 const HomeScreen = () => {
+  const { userId, username } = useLocalSearchParams(); // Fetching userId and username
   const [selectedTab, setSelectedTab] = useState('Chats');
+
+  // Handle missing userId
+  useEffect(() => {
+    if (!userId) {
+      Alert.alert('Error', 'No user ID found. Please log in again.');
+      // Here you could navigate to the login screen if userId is missing
+    }
+  }, [userId]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -17,14 +27,23 @@ const HomeScreen = () => {
           <AntDesign name="user" size={24} color="#fff" />
         </TouchableOpacity>
       </View>
+
+      <View style={styles.welcomeContainer}>
+        {/* Conditional rendering to ensure username is valid */}
+        <Text style={styles.welcomeText}>
+          {username ? `Welcome, ${username}` : 'Welcome!'}
+        </Text>
+      </View>
+
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
-          placeholder={`Search ${selectedTab}`}
+          placeholder={`Search ${selectedTab ? selectedTab : ''}`}
           placeholderTextColor="#aaa"
         />
         <AntDesign name="search1" size={20} color="#aaa" style={styles.searchIcon} />
       </View>
+
       <View style={styles.tabsContainer}>
         <TouchableOpacity
           style={[styles.tab, selectedTab === 'Chats' && styles.activeTab]}
@@ -42,7 +61,13 @@ const HomeScreen = () => {
           <Text style={styles.tabText}>Calls</Text>
         </TouchableOpacity>
       </View>
-      {selectedTab === 'Chats' ? <Chats /> : <Friends />}
+
+      {/* Conditional rendering for Chats and Friends */}
+      {selectedTab === 'Chats' ? (
+        <Chats userId={userId} />
+      ) : (
+        <Friends userId={userId} />
+      )}
     </SafeAreaView>
   );
 };
@@ -57,13 +82,21 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingBottom: 10, // Added padding
+    paddingBottom: 10,
   },
   notificationButton: {
-    padding: 10, // Added padding
+    padding: 10,
   },
   profileButton: {
-    padding: 10, // Added padding
+    padding: 10,
+  },
+  welcomeContainer: {
+    marginBottom: 10,
+  },
+  welcomeText: {
+    color: '#fff',
+    fontSize: 20,
+    fontWeight: 'bold',
   },
   searchContainer: {
     flexDirection: 'row',
@@ -71,7 +104,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#fff',
     borderRadius: 30,
     padding: 10,
-    marginBottom: 20, // Adjusted margin for better spacing
+    marginBottom: 20,
   },
   searchInput: {
     flex: 1,
@@ -84,7 +117,7 @@ const styles = StyleSheet.create({
   },
   tabsContainer: {
     flexDirection: 'row',
-    marginBottom: 20, // Adjusted margin for better spacing
+    marginBottom: 20,
   },
   tab: {
     flex: 1,

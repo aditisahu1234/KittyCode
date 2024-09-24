@@ -19,7 +19,7 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     setLoading(true);
-
+  
     try {
       const response = await fetch('http://10.0.2.2:3000/api/auth/login', {
         method: 'POST',
@@ -28,14 +28,17 @@ export default function LoginScreen() {
         },
         body: JSON.stringify({ email, password }),
       });
-
+  
       const data = await response.json();
       setLoading(false);
-
+  
       if (data.success) {
         Alert.alert('Success', 'Login successful');
-        // Navigate to the Contact screen
-        router.push('../homescreen');
+        // Navigate to HomeScreen, passing both token and username
+        router.push({
+          pathname: '../homescreen',
+          params: { userId: data.token, username: data.username }, // Pass the username here
+        });
       } else {
         Alert.alert('Error', data.message);
       }
@@ -44,6 +47,7 @@ export default function LoginScreen() {
       Alert.alert('Error', 'An error occurred. Please try again.');
     }
   };
+  
 
   if (!loaded) {
     return <ActivityIndicator size="large" color="#0000ff" />;
@@ -51,18 +55,15 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      {/* Back button */}
       <TouchableOpacity style={styles.backButton}>
         <AntDesign name="arrowleft" size={24} color="#d1ff00" />
       </TouchableOpacity>
 
-      {/* Welcome message */}
       <View style={styles.header}>
         <Text style={styles.welcomeText}>Hello, Welcome Back</Text>
         <Text style={styles.subText}>Happy to see you again, to use your account please login first.</Text>
       </View>
 
-      {/* Input fields */}
       <View style={styles.inputContainer}>
         <Text style={styles.label}>Email Address</Text>
         <TextInput
@@ -87,7 +88,6 @@ export default function LoginScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Login button */}
       <TouchableOpacity style={styles.loginButton} onPress={handleLogin} disabled={loading}>
         <LinearGradient
           colors={['#ff00ff', '#ffd700']}
@@ -103,7 +103,6 @@ export default function LoginScreen() {
         </LinearGradient>
       </TouchableOpacity>
 
-      {/* Social login */}
       <Text style={styles.orLoginWith}>Or Login with</Text>
       <View style={styles.socialContainer}>
         <TouchableOpacity>
