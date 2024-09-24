@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
 import { AntDesign } from '@expo/vector-icons';
+import { useRouter } from 'expo-router';
+
+const BASE_URL = "https://f2c3-106-221-156-149.ngrok-free.app";
 
 const Friends = ({ userId }) => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [username, setUsername] = useState('');
   const [friends, setFriends] = useState([]);
   const [friendRequests, setFriendRequests] = useState([]);
+  const router = useRouter(); // Using Expo Router for navigation
 
   useEffect(() => {
     fetchFriends();
@@ -15,7 +19,7 @@ const Friends = ({ userId }) => {
 
   const fetchFriends = async () => {
     try {
-        const response = await fetch(`http://10.0.2.2:3000/api/friends`, {
+        const response = await fetch(`${BASE_URL}/api/friends`, {
             method: 'GET',
             headers: {
                 'Content-Type': 'application/json',
@@ -33,13 +37,11 @@ const Friends = ({ userId }) => {
     } catch (error) {
         console.error('Error fetching friends:', error.message);
     }
-};
-
-  
+  };
 
   const fetchFriendRequests = async () => {
     try {
-      const response = await fetch(`http://10.0.2.2:3000/api/friends/requests`, {
+      const response = await fetch(`${BASE_URL}/api/friends/requests`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -55,7 +57,7 @@ const Friends = ({ userId }) => {
 
   const handleAddFriend = async () => {
     try {
-      const response = await fetch(`http://10.0.2.2:3000/api/friends/request`, {
+      const response = await fetch(`${BASE_URL}/api/friends/request`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -78,7 +80,7 @@ const Friends = ({ userId }) => {
 
   const handleAcceptRequest = async (requestId) => {
     try {
-      const response = await fetch(`http://10.0.2.2:3000/api/friends/accept`, {
+      const response = await fetch(`${BASE_URL}/api/friends/accept`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -98,7 +100,7 @@ const Friends = ({ userId }) => {
 
   const handleRejectRequest = async (requestId) => {
     try {
-      const response = await fetch(`http://10.0.2.2:3000/api/friends/reject`, {
+      const response = await fetch(`${BASE_URL}/api/friends/reject`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -116,13 +118,19 @@ const Friends = ({ userId }) => {
   };
 
   const renderFriendItem = ({ item }) => (
-    <View style={styles.friendItem}>
+    <TouchableOpacity 
+      style={styles.friendItem}
+      onPress={() => router.push({
+        pathname: '../chatscreen',
+        params: { friendId: item._id, friendName: item.name },
+      })}
+    >
       <View style={styles.profilePic}></View>
       <View style={styles.friendDetails}>
         <Text style={styles.friendName}>{item.name}</Text>
         <Text style={styles.friendStatus}>Online</Text>
       </View>
-    </View>
+    </TouchableOpacity>
   );
 
   const renderFriendRequestItem = ({ item }) => (

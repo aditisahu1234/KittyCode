@@ -3,6 +3,8 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityInd
 import { useFonts } from 'expo-font';
 import { LinearGradient } from 'expo-linear-gradient';
 
+const BASE_URL = "https://f2c3-106-221-156-149.ngrok-free.app";
+
 export default function CreateAccountScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -13,6 +15,7 @@ export default function CreateAccountScreen() {
     'Poppins-SemiBold': require('../../assets/fonts/Poppins-SemiBold.ttf'),
   });
 
+
   const handleCreateAccount = async () => {
     if (password !== confirmPassword) {
       Alert.alert('Error', 'Passwords do not match');
@@ -20,7 +23,7 @@ export default function CreateAccountScreen() {
     }
 
     try {
-      const response = await fetch('http://10.0.2.2:3000/api/auth/register', {
+      const response = await fetch(`${BASE_URL}/api/auth/register`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -5,12 +5,14 @@ import { AntDesign, FontAwesome } from '@expo/vector-icons';
 import { useFonts } from 'expo-font';
 import { useRouter } from 'expo-router';
 
+const BASE_URL = "https://f2c3-106-221-156-149.ngrok-free.app";
+
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
   const router = useRouter();
-
+  
   const [loaded] = useFonts({
     'Poppins-Regular': require('../../assets/fonts/Poppins-Regular.ttf'),
     'Poppins-SemiBold': require('../../assets/fonts/Poppins-SemiBold.ttf'),
@@ -21,7 +23,7 @@ export default function LoginScreen() {
     setLoading(true);
   
     try {
-      const response = await fetch('http://10.0.2.2:3000/api/auth/login', {
+      const response = await fetch(`${BASE_URL}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

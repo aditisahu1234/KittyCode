@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, StyleSheet, TouchableOpacity, Alert } from 'react-native';
 import { AntDesign } from '@expo/vector-icons';
 
+const BASE_URL = "https://f2c3-106-221-156-149.ngrok-free.app";
+
 const Notifications = ({ userId }) => {
   const [notifications, setNotifications] = useState([]);
 
@@ -11,7 +13,7 @@ const Notifications = ({ userId }) => {
 
   const fetchNotifications = async () => {
     try {
-      const response = await fetch(`http://10.0.2.2:3000/api/notifications`, {
+      const response = await fetch(`${BASE_URL}/api/notifications`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
