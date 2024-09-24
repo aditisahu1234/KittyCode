@@ -6,7 +6,7 @@ const generateToken = (id) => {
   return jwt.sign({ id }, process.env.JWT_SECRET, { expiresIn: '30d' });
 };
 
-// Register user
+// Register User
 exports.registerUser = async (req, res) => {
   const { name, email, password } = req.body;
 
@@ -14,7 +14,7 @@ exports.registerUser = async (req, res) => {
     // Check if user already exists
     let user = await User.findOne({ email });
     if (user) {
-      return res.status(400).json({ success: false, message: 'User already exists' });
+      return res.status(400).json({ message: 'User already exists' });
     }
 
     // Create new user and save to database
@@ -24,14 +24,18 @@ exports.registerUser = async (req, res) => {
     // Create JWT token
     const token = generateToken(user._id);
 
-    res.json({ success: true, token, message: 'User registered successfully' });
+    res.status(201).json({
+      success: true,
+      token,
+      username: user.name,
+      message: 'User registered successfully',
+    });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: 'Server error' });
+    res.status(500).json({ message: 'Server Error', error: error.message });
   }
 };
 
-// Login user and return username
+// Login User
 exports.loginUser = async (req, res) => {
   const { email, password } = req.body;
 
@@ -39,22 +43,25 @@ exports.loginUser = async (req, res) => {
     // Check if user exists
     const user = await User.findOne({ email });
     if (!user) {
-      return res.status(400).json({ success: false, message: 'Invalid credentials' });
+      return res.status(400).json({ message: 'Invalid credentials' });
     }
 
     // Compare password
     const isMatch = await user.matchPassword(password);
     if (!isMatch) {
-      return res.status(400).json({ success: false, message: 'Invalid credentials' });
+      return res.status(400).json({ message: 'Invalid credentials' });
     }
 
     // Generate JWT token
     const token = generateToken(user._id);
 
-    // Return token and username
-    res.json({ success: true, token, username: user.name, message: 'Login successful' });
+    res.status(200).json({
+      success: true,
+      token,
+      username: user.name,
+      message: 'Login successful',
+    });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: 'Server error' });
+    res.status(500).json({ message: 'Server Error', error: error.message });
   }
 };

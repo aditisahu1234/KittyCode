@@ -15,7 +15,7 @@ app.use(bodyParser.json());
 app.use('/api/auth', authRoutes);
 
 // Friend Request Routes
-app.use('/api/friends', friendRoutes); // Ensure the route is correctly registered
+app.use('/api/friends', friendRoutes);
 
 const PORT = process.env.PORT || 3000;
 app.listen(PORT, () => {
