@@ -10,8 +10,8 @@ export default function Index() {
         alignItems: "center",
       }}
     >
-      <Link href={'/splash'}> <b>Splash</b> </Link>
-      <Link href={'/rough'}> <b>Rough</b> </Link>
+      <Link href={'/splash'}> <Text>Splash</Text> </Link>
+      {/* <Link href={'/rough'}> <b>Rough</b> </Link> */}
     </View>
   );
 }
