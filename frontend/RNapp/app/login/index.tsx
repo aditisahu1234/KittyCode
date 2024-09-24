@@ -35,7 +35,7 @@ export default function LoginScreen() {
       if (data.success) {
         Alert.alert('Success', 'Login successful');
         // Navigate to the Contact screen
-        router.push('../contact');
+        router.push('../homescreen');
       } else {
         Alert.alert('Error', data.message);
       }
