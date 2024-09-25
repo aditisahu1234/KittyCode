@@ -1,31 +1,119 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useLocalSearchParams } from 'expo-router';
 import { AntDesign, MaterialIcons } from '@expo/vector-icons';
+import io from 'socket.io-client';
+
+const BASE_URL = "https://f2c3-106-221-156-149.ngrok-free.app"; // Replace with your actual base URL
+const socket = io(BASE_URL); // Connect to WebSocket server
 
 const ChatScreen = () => {
-  const { friendId, friendName } = useLocalSearchParams();
+  const { userId, friendId, friendName } = useLocalSearchParams();  // Retrieve userId here
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
+  const [roomId, setRoomId] = useState(null);
 
   useEffect(() => {
-    // Mock fetching chat messages
-    setMessages([
-      { id: '1', text: 'Hello!', sender: 'friend' },
-      { id: '2', text: 'Hi there!', sender: 'me' },
-    ]);
+    console.log('userId:', userId, 'friendId:', friendId);  // Debug: Check userId and friendId
+    const fetchChatRoom = async () => {
+      if (!userId || !friendId) {
+        console.warn('userId or friendId is missing');  // Warn if missing
+        return;
+      }
+  
+      try {
+        const response = await fetch(`${BASE_URL}/api/chats/room`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${userId}`,  // Ensure token is passed
+          },
+          body: JSON.stringify({ friendId }),  // Pass only friendId to backend
+        });
+  
+        const data = await response.json();
+        console.log('Room ID fetched:', data._id);  // Debug: Ensure roomId is valid
+  
+        if (data._id) {
+          setRoomId(data._id);  // Set the room ID for the chat
+          socket.emit('joinRoom', data._id);  // Join the room after fetching it
+          fetchMessages(data._id);  // Fetch the messages for this room
+        } else {
+          console.warn('Room ID not received from backend');
+        }
+      } catch (error) {
+        console.log('Error fetching chat room:', error.message);
+      }
+    };
+  
+    fetchChatRoom();
+  
+    return () => {
+      socket.disconnect();  // Disconnect socket on component unmount
+    };
   }, [friendId]);
 
-  const handleSendMessage = () => {
-    if (inputMessage.trim()) {
-      setMessages([...messages, { id: Date.now().toString(), text: inputMessage, sender: 'me' }]);
-      setInputMessage('');
+  // Fetch existing messages
+  const fetchMessages = async (roomId) => {
+    try {
+      const response = await fetch(`${BASE_URL}/api/chats/${roomId}/messages`, {
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${userId}`,  // Use the userId here
+        },
+      });
+      const data = await response.json();
+      setMessages(data);
+    } catch (error) {
+      console.log('Error fetching messages:', error.message);
     }
   };
 
+  // Handle incoming messages in real-time
+  useEffect(() => {
+    socket.on('receiveMessage', (message) => {
+      console.log('Received message:', message);  // Debug: Check received message
+      setMessages((prevMessages) => [...prevMessages, message]);  // Append the message to chat
+    });
+
+    return () => {
+      socket.off('receiveMessage');  // Clean up listener on unmount
+    };
+  }, []);
+
+  // Handle sending message on the client
+  const handleSendMessage = () => {
+    if (!inputMessage.trim()) {
+      console.warn('Message is missing');  // Check if message is empty
+      return;
+    }
+
+    if (!roomId) {
+      console.warn('Room ID is missing');  // Check if roomId is missing
+      return;
+    }
+
+    const message = {
+      sender: userId,
+      text: inputMessage,
+      timestamp: new Date(),
+    };
+
+    console.log('Sending message:', message);  // Debug: Log the message being sent
+
+    // Emit the message to the server
+    socket.emit('sendMessage', { roomId, message });
+
+    // Optimistically update the chat
+    setMessages((prevMessages) => [...prevMessages, message]);
+
+    // Clear input field
+    setInputMessage('');
+  };
+
   const renderMessage = ({ item }) => (
-    <View style={[styles.messageItem, item.sender === 'me' && styles.myMessage]}>
+    <View style={[styles.messageItem, item.sender === userId && styles.myMessage]}>
       <Text style={styles.messageText}>{item.text}</Text>
     </View>
   );
@@ -50,7 +138,7 @@ const ChatScreen = () => {
       <FlatList
         data={messages}
         renderItem={renderMessage}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item._id || item.id}
         style={styles.chatList}
         contentContainerStyle={styles.chatListContent}
       />
@@ -67,7 +155,11 @@ const ChatScreen = () => {
         <TouchableOpacity style={styles.microphoneButton}>
           <MaterialIcons name="mic" size={24} color="#616BFC" />
         </TouchableOpacity>
-        <TouchableOpacity onPress={handleSendMessage} style={styles.sendButton}>
+        <TouchableOpacity 
+          onPress={handleSendMessage} 
+          style={[styles.sendButton, (!roomId || !inputMessage.trim()) && { opacity: 0.5 }]} 
+          disabled={!roomId || !inputMessage.trim()}  // Disable button if no message or roomId
+        >
           <AntDesign name="send" size={24} color="#fff" />
         </TouchableOpacity>
       </View>

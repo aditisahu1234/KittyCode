@@ -120,10 +120,13 @@ const Friends = ({ userId }) => {
   const renderFriendItem = ({ item }) => (
     <TouchableOpacity 
       style={styles.friendItem}
-      onPress={() => router.push({
-        pathname: '../chatscreen',
-        params: { friendId: item._id, friendName: item.name },
-      })}
+      onPress={() => {
+        console.log('Navigating to chat with:', { userId, friendId: item._id, friendName: item.name });  // Debug: Log params
+        router.push({
+          pathname: '../chatscreen',
+          params: { userId, friendId: item._id, friendName: item.name },  // Ensure correct params
+        });
+      }}
     >
       <View style={styles.profilePic}></View>
       <View style={styles.friendDetails}>
@@ -132,6 +135,7 @@ const Friends = ({ userId }) => {
       </View>
     </TouchableOpacity>
   );
+  
 
   const renderFriendRequestItem = ({ item }) => (
     <View style={styles.friendRequestItem}>
