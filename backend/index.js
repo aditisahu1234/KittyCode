@@ -14,7 +14,12 @@ connectDB();
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+  cors: {
+    origin: '*', // Adjust based on your front-end domain
+    methods: ['GET', 'POST'],
+  },
+});
 
 app.use(bodyParser.json());
 app.use('/api/auth', authRoutes);
@@ -32,12 +37,10 @@ io.on('connection', (socket) => {
   socket.on('sendMessage', async ({ roomId, message }) => {
     try {
       console.log(`Received message from room ${roomId}:`, message);
-
-      // Save the message to the database
       const savedMessage = await handleSendMessage(roomId, message);
-
-      // Broadcast the message to everyone in the room
-      io.to(roomId).emit('receiveMessage', savedMessage);
+  
+      // Broadcast message to all clients in the room, including the senderJwt
+      socket.broadcast.to(roomId).emit('receiveMessage', savedMessage);
     } catch (error) {
       console.error('Error sending message:', error.message);
     }
@@ -52,3 +55,7 @@ const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
 });
+
+
+
+ 
