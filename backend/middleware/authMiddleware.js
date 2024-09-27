@@ -1,3 +1,4 @@
+// File: middleware/authMiddleware.js
 const jwt = require('jsonwebtoken');
 const User = require('../models/userModel');
 
@@ -6,12 +7,13 @@ const protect = async (req, res, next) => {
 
   if (req.headers.authorization && req.headers.authorization.startsWith('Bearer')) {
     try {
+      // Extract the token
       token = req.headers.authorization.split(' ')[1];
 
-      // Verify the token and get the user's id from the token payload
+      // Verify the token
       const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-      // Find the user by id and exclude the password
+      // Find the user and attach it to the request object
       req.user = await User.findById(decoded.id).select('-password');
 
       if (!req.user) {
