@@ -113,3 +113,40 @@ exports.handleSendMessage = async (roomId, message) => {
     throw error;
   }
 };
+
+// chatController.js
+
+// Fetch all chat rooms for the authenticated user that have messages
+exports.getUserChats = async (req, res) => {
+  const userId = req.user._id; // Correctly extract the user ID from the authenticated user
+
+  try {
+    // Find chats where the authenticated user is a participant and have at least one message
+    const chats = await Chat.find({ participants: userId, 'messages.0': { $exists: true } })
+      .populate('participants', 'name')
+      .populate('messages.sender', 'name')
+      .sort({ 'messages.timestamp': -1 }); // Sort by the latest message timestamp
+
+    // Format the data to send to the frontend
+    const formattedChats = chats.map((chat) => {
+      const lastMessage = chat.messages[chat.messages.length - 1];
+      const friend = chat.participants.find((p) => p._id.toString() !== userId.toString());
+
+      return {
+        _id: chat._id,
+        friendId: friend._id,
+        name: friend.name,
+        avatar: friend.avatar || 'https://via.placeholder.com/50', // Default avatar if not set
+        lastMessage: lastMessage.text,
+        time: new Date(lastMessage.timestamp).toLocaleTimeString(),
+        unread: false, // Implement your unread logic if needed
+      };
+    });
+
+    res.status(200).json(formattedChats);
+  } catch (error) {
+    res.status(500).json({ message: 'Server Error', error: error.message });
+  }
+};
+
+
