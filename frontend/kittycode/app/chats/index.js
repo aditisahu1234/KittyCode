@@ -13,7 +13,7 @@ const MessagesScreen = ({ userId }) => { // userId is the JWT token here
   useEffect(() => {
     const fetchChats = async () => {
       try {
-        const response = await fetch(`https://666d-171-48-110-53.ngrok-free.app/api/chats/user`, { // Correct endpoint without userId in the URL
+        const response = await fetch(`http://3.26.156.142:3000/api/chats/user`, { // Correct endpoint without userId in the URL
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${userId}`, // Correctly using userId as the token in headers
