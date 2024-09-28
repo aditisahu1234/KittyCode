@@ -3,8 +3,8 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityInd
 import { useFonts } from 'expo-font';
 import { LinearGradient } from 'expo-linear-gradient';
 
-// const BASE_URL = "http://3.26.156.142:3000";
-const BASE_URL = "https://666d-171-48-110-53.ngrok-free.app";
+const BASE_URL = "http://3.26.156.142:3000";
+
 
 export default function CreateAccountScreen() {
   const [name, setName] = useState('');

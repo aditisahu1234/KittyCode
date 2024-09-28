@@ -5,8 +5,7 @@ import { useLocalSearchParams } from 'expo-router';
 import { AntDesign, MaterialIcons } from '@expo/vector-icons';
 import io from 'socket.io-client';
 
-// const BASE_URL = "http://3.26.156.142:3000"; // Replace with your actual base URL
-const BASE_URL = "https://666d-171-48-110-53.ngrok-free.app";
+const BASE_URL = "http://3.26.156.142:3000"; // Replace with your actual base URL
 const socket = io(BASE_URL, {
   autoConnect: false,  // Disable automatic connection for manual control
   reconnectionAttempts: 3,  // Retry 3 times to reconnect if disconnected

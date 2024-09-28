@@ -3,7 +3,7 @@ import { View, Text, FlatList, StyleSheet, TouchableOpacity, Modal, TextInput, A
 import { AntDesign } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
-const BASE_URL = "https://666d-171-48-110-53.ngrok-free.app";
+const BASE_URL = "http://3.26.156.142:3000";
 
 const Friends = ({ userId }) => {
   const [isModalVisible, setIsModalVisible] = useState(false);
