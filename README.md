@@ -36,6 +36,8 @@ KittyCode is a secure end-to-end communication platform designed for messaging, 
     ```bash
     ngrok http 3000
     ```
+      Then change the url in every frontend file where api calls are being made.
+      The backend server is running on a AWS EC2 instance so no need to do these steps if just for testing.
 4. **Run the frontend:**
    
     **Install the dependencies required for frontend:**
