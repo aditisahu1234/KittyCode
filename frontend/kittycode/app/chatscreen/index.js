@@ -1,163 +1,263 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { View, Text, FlatList, TextInput, TouchableOpacity, StyleSheet, Image, KeyboardAvoidingView, Platform, Keyboard } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useLocalSearchParams } from 'expo-router';
+import { 
+  View, 
+  Text, 
+  FlatList, 
+  TextInput, 
+  TouchableOpacity, 
+  StyleSheet, 
+  Image, 
+  KeyboardAvoidingView, 
+  Platform, 
+  Keyboard 
+} from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';import { useLocalSearchParams } from 'expo-router';
 import { AntDesign, MaterialIcons } from '@expo/vector-icons';
 import io from 'socket.io-client';
+import { 
+  getPrivateKey, 
+  sendMessage, 
+  receiveMessage 
+} from '../utils/crypto';
+import { decode as decodeBase64 } from '@stablelib/base64';  // Import decodeBase64 from stablelib
+import * as Keychain from 'react-native-keychain';  // Add this
+import { useRouter } from 'expo-router';
 
-const BASE_URL = "http://3.26.156.142:3000"; // Replace with your actual base URL
+const BASE_URL = "https://b57d-122-163-78-156.ngrok-free.app";
 const socket = io(BASE_URL, {
-  autoConnect: false,  // Disable automatic connection for manual control
-  reconnectionAttempts: 3,  // Retry 3 times to reconnect if disconnected
+  autoConnect: false,
+  reconnectionAttempts: 3,
 });
 
 const ChatScreen = () => {
-  const { userId, friendId, friendName } = useLocalSearchParams();
+  const { userId, username, friendId, friendName } = useLocalSearchParams();
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
   const [roomId, setRoomId] = useState(null);
-  const [isAtBottom, setIsAtBottom] = useState(true); // Track if user is at the bottom of the chat
-  const flatListRef = useRef(null); // Reference to the FlatList
+  const [isAtBottom, setIsAtBottom] = useState(true);
+  const [userPrivateKey, setUserPrivateKey] = useState(null);  // User's private key
+  const [friendPublicKey, setFriendPublicKey] = useState(null);  // Friend's public key
+  const flatListRef = useRef(null);
   const [keyboardOffset, setKeyboardOffset] = useState(0);
 
   useEffect(() => {
-    console.log('userId:', userId, 'friendId:', friendId);
+  const initializeChatRoom = async () => {
+    if (!userId || !friendId || !username) {
+      console.warn('userId, friendId, or username is missing');
+      return;
+    }
 
-    const fetchChatRoom = async () => {
-      if (!userId || !friendId) {
-        console.warn('userId or friendId is missing');
+    try {
+      console.log('Initializing chat room for user:', userId, ' with name :', username, ' with friend:', friendId);
+
+      const credentials = await Keychain.getGenericPassword();
+      let privateKey; // Define privateKey within the scope of the function
+
+      if (credentials && credentials.username === username) {
+        privateKey = decodeBase64(credentials.password); // Decode the stored private key
+        setUserPrivateKey(privateKey);  // Set the user's private key in state
+        console.log('User private key:', privateKey);  // Log the private key
+      } else {
+        console.error('No private key found for the user.');
         return;
       }
 
-      try {
-        const response = await fetch(`${BASE_URL}/api/chats/room`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${userId}`,  // Ensure token is passed
-          },
-          body: JSON.stringify({ friendId }),
-        });
+      const response = await fetch(`${BASE_URL}/api/chats/room`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${userId}`,
+        },
+        body: JSON.stringify({ friendId }),
+      });
 
-        const data = await response.json();
-        setRoomId(data._id);
-        socket.connect();
-        socket.emit('joinRoom', data._id);  // Join room after fetching it
-        fetchMessages(data._id);  // Fetch messages after joining room
-      } catch (error) {
-        console.log('Error fetching chat room:', error.message);
+      const data = await response.json();
+
+      if (!data._id || !data.friendPublicKey) {
+        console.error('Failed to retrieve room ID or friend public key:', data);
+        alert(data.message); 
+        return;
       }
-    };
 
-    fetchChatRoom();
+      console.log('Friend public key received:', data.friendPublicKey);
 
-    return () => socket.disconnect();  // Clean up socket on unmount
-  }, [friendId]);
+      const friendPublicKeyUint8Array = decodeBase64(data.friendPublicKey);
+      setRoomId(data._id);
+      setFriendPublicKey(friendPublicKeyUint8Array);
+      
+      if (!privateKey || !friendPublicKeyUint8Array) {
+        console.error('Keys missing, cannot initialize chat.');
+        return;
+      }
+      
+      socket.connect();
+      
+      socket.connect();
+      socket.emit('joinRoom', data._id);
 
-  const fetchMessages = async (roomId) => {
+      await fetchMessages(data._id, privateKey); // Use the privateKey here
+    } catch (error) {
+      console.error('Error initializing chat room:', error.message);
+    }
+  };
+
+  initializeChatRoom();
+
+  return () => socket.disconnect();
+}, [userId, friendId, username]);
+
+  
+  const fetchMessages = async (roomId, privateKey) => {
+    if (!privateKey) {
+      console.error('Private key not available');
+      return;
+    }
+  
     try {
       const response = await fetch(`${BASE_URL}/api/chats/${roomId}/messages`, {
         headers: {
           'Content-Type': 'application/json',
-          Authorization: `Bearer ${userId}`,  // Use the userId here
+          Authorization: `Bearer ${userId}`,
         },
       });
-      const data = await response.json();
-
-      setMessages(data);
+  
+      const encryptedMessages = await response.json();
+      if (!Array.isArray(encryptedMessages)) {
+        console.warn('Invalid response for messages:', encryptedMessages);
+        return;
+      }
+  
+      const decryptedMessages = await Promise.all(
+        encryptedMessages.map(async (message) => {
+          try {
+            const decryptedMessage = await receiveMessage(
+              privateKey,  // Use the private key to decrypt the message
+              message.senderPublicKey,
+              null,
+              message.encryptedText
+            );
+            return { ...message, text: decryptedMessage, isSender: message.sender === userId };
+          } catch (decryptError) {
+            console.error('Error decrypting message:', decryptError);
+            return { ...message, text: 'Error decrypting message', isSender: message.sender === userId };
+          }
+        })
+      );
+  
+      setMessages(decryptedMessages);
     } catch (error) {
       console.log('Error fetching messages:', error.message);
     }
   };
+  
 
   useEffect(() => {
-    socket.on('receiveMessage', (message) => {
-      console.log('Received message:', message);
-      setMessages((prevMessages) => [...prevMessages, message]);
-
-      if (isAtBottom) {
-        flatListRef.current?.scrollToEnd({ animated: true });
+    if (!userPrivateKey) return;
+  
+    socket.on('receiveMessage', async (message) => {
+      try {
+        const decryptedMessage = await receiveMessage(
+          userPrivateKey,  // Use the private key to decrypt the incoming message
+          message.senderPublicKey,
+          null,
+          message.encryptedText
+        );
+  
+        setMessages((prevMessages) => [...prevMessages, { ...message, text: decryptedMessage }]);
+  
+        if (isAtBottom) {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }
+      } catch (error) {
+        console.error('Error handling received message:', error);
       }
     });
+  
+    return () => socket.off('receiveMessage');
+  }, [isAtBottom, userPrivateKey]);
+  
 
-    return () => socket.off('receiveMessage');  // Clean up listener on unmount
-  }, [isAtBottom]);
-
-  useEffect(() => {
-    const keyboardDidShowListener = Keyboard.addListener('keyboardDidShow', (e) => {
-      setKeyboardOffset(e.endCoordinates.height);  // Set the keyboard offset
-    });
-
-    const keyboardDidHideListener = Keyboard.addListener('keyboardDidHide', () => {
-      setKeyboardOffset(0);  // Reset keyboard offset
-    });
-
-    return () => {
-      keyboardDidShowListener.remove();
-      keyboardDidHideListener.remove();
-    };
-  }, []);
-
-  const handleSendMessage = () => {
+  const handleSendMessage = async () => {
     if (!inputMessage.trim()) {
       console.warn('Message is missing');
       return;
     }
-
-    if (!roomId) {
-      console.warn('Room ID is missing');
+  
+    if (!roomId || !userPrivateKey || !friendPublicKey) {
+      console.warn('Room ID, private key, or friend public key is missing');
       return;
     }
-
-    const message = {
-      sender: userId,  // Keep sender as userId
-      text: inputMessage,
-      timestamp: new Date(),
-      isSender: true,  // Mark as sender since this user sent the message
-    };
-
-    console.log('Sending message:', message);
-    socket.emit('sendMessage', { roomId, message });
-
-    // Set the message immediately with isSender flag
-    setMessages((prevMessages) => [...prevMessages, message]);
-
-    setInputMessage('');  // Clear the input after sending the message
-
-    // Scroll to bottom after sending a message
-    flatListRef.current?.scrollToEnd({ animated: true });
-    setIsAtBottom(true);
+  
+    try {
+      console.log('Encrypting message:', inputMessage);
+      const { encryptedMessage, newDhPublicKey } = await sendMessage(
+        userPrivateKey,
+        friendPublicKey,
+        null,
+        inputMessage
+      );
+  
+      // Create a properly formatted message object
+      const message = {
+        sender: userId,
+        encryptedText: encryptedMessage,
+        timestamp: new Date().toISOString(),
+        senderPublicKey: newDhPublicKey, // Make sure this is included
+      };
+  
+      console.log('Sending encrypted message:', message);
+      socket.emit('sendMessage', { roomId, message });
+  
+      // Add message to local state
+      setMessages((prevMessages) => [
+        ...prevMessages,
+        { ...message, text: inputMessage, isSender: true }
+      ]);
+      
+      setInputMessage('');
+    } catch (error) {
+      console.error('Error sending message:', error);
+      Alert.alert('Error', 'Failed to send message. Please try again.');
+    }
   };
 
   const renderMessage = ({ item }) => (
-    <View
-      style={[
-        styles.messageItem,
-        item.isSender ? styles.myMessage : styles.receivedMessage,  // Use isSender flag
-      ]}
-    >
+    <View style={[
+      styles.messageItem,
+      item.isSender ? styles.myMessage : styles.receivedMessage // Use isSender to decide the style
+    ]}>
       <Text style={styles.messageText}>{item.text}</Text>
+      <Text style={styles.messageTime}>
+        {new Date(item.timestamp).toLocaleTimeString([], { 
+          hour: '2-digit', 
+          minute: '2-digit' 
+        })}
+      </Text>
     </View>
   );
+  
 
   const handleScroll = (event) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
-    const isAtBottom = contentOffset.y >= contentSize.height - layoutMeasurement.height - 50;  // Adjust for better detection
+    const isAtBottom = 
+      contentOffset.y >= contentSize.height - layoutMeasurement.height - 50;
     setIsAtBottom(isAtBottom);
   };
 
   const scrollToBottom = () => {
-    flatListRef.current?.scrollToOffset({
-      offset: messages.length * 100 + 50,  // Assuming average message height, add extra padding
-      animated: true,
-    });
+    flatListRef.current?.scrollToEnd({ animated: true });
     setIsAtBottom(true);
   };
 
+  const insets = useSafeAreaInsets();
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['bottom']}>
       <View style={styles.header}>
-        <Image source={{ uri: 'https://via.placeholder.com/40' }} style={styles.profilePic} />
+        <Image 
+          source={{ uri: 'https://via.placeholder.com/40' }} 
+          style={styles.profilePic} 
+        />
         <View style={styles.headerInfo}>
           <Text style={styles.friendName}>{friendName}</Text>
           <Text style={styles.status}>Online</Text>
@@ -172,26 +272,31 @@ const ChatScreen = () => {
         </View>
       </View>
 
-      <KeyboardAvoidingView
-        style={{ flex: 1 }}
+      <KeyboardAvoidingView 
+        style={{ flex: 1 }} 
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         keyboardVerticalOffset={keyboardOffset}
       >
         <FlatList
           data={messages}
           renderItem={renderMessage}
-          keyExtractor={(item) => item._id || item.id}
+          keyExtractor={(item) => item._id || String(item.timestamp)}
           style={styles.chatList}
           contentContainerStyle={styles.chatListContent}
-          ref={flatListRef} // Add ref to FlatList
-          onScroll={handleScroll} // Track scroll to detect user scrolling
+          ref={flatListRef}
+          onScroll={handleScroll}
           onContentSizeChange={() => {
-            if (isAtBottom) flatListRef.current?.scrollToEnd({ animated: true });
+            if (isAtBottom) {
+              flatListRef.current?.scrollToEnd({ animated: true });
+            }
           }}
         />
 
         {!isAtBottom && (
-          <TouchableOpacity style={styles.scrollToBottomButton} onPress={scrollToBottom}>
+          <TouchableOpacity 
+            style={styles.scrollToBottomButton} 
+            onPress={scrollToBottom}
+          >
             <MaterialIcons name="arrow-downward" size={24} color="#fff" />
           </TouchableOpacity>
         )}
@@ -205,13 +310,17 @@ const ChatScreen = () => {
             value={inputMessage}
             onChangeText={setInputMessage}
             placeholder="Type here..."
+            multiline
           />
           <TouchableOpacity style={styles.microphoneButton}>
             <MaterialIcons name="mic" size={24} color="#616BFC" />
           </TouchableOpacity>
-          <TouchableOpacity
+          <TouchableOpacity 
             onPress={handleSendMessage}
-            style={[styles.sendButton, (!roomId || !inputMessage.trim()) && { opacity: 0.5 }]}
+            style={[
+              styles.sendButton,
+              (!roomId || !inputMessage.trim()) && { opacity: 0.5 }
+            ]}
             disabled={!roomId || !inputMessage.trim()}
           >
             <MaterialIcons name="send" size={24} color="#fff" />
@@ -284,6 +393,12 @@ const styles = StyleSheet.create({
   messageText: {
     fontSize: 16,
   },
+  messageTime: {
+    fontSize: 12,
+    color: '#666',
+    alignSelf: 'flex-end',
+    marginTop: 5,
+  },
   inputContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -297,6 +412,7 @@ const styles = StyleSheet.create({
   },
   input: {
     flex: 1,
+    maxHeight: 100,
     paddingVertical: 5,
     paddingHorizontal: 15,
     fontSize: 16,
@@ -319,6 +435,14 @@ const styles = StyleSheet.create({
     backgroundColor: '#616BFC',
     borderRadius: 25,
     padding: 10,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.25,
+    shadowRadius: 3.84,
   },
 });
 

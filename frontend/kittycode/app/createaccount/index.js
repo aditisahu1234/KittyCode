@@ -2,20 +2,21 @@ import React, { useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityIndicator } from 'react-native';
 import { useFonts } from 'expo-font';
 import { LinearGradient } from 'expo-linear-gradient';
+import { useRouter } from 'expo-router';
 
-const BASE_URL = "http://3.26.156.142:3000";
-
+const BASE_URL = "https://b57d-122-163-78-156.ngrok-free.app";
 
 export default function CreateAccountScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [loading, setLoading] = useState(false);
   const [loaded] = useFonts({
     'Poppins-Regular': require('../../assets/fonts/Poppins-Regular.ttf'),
     'Poppins-SemiBold': require('../../assets/fonts/Poppins-SemiBold.ttf'),
   });
-
+  const router = useRouter();
 
   const handleCreateAccount = async () => {
     if (password !== confirmPassword) {
@@ -23,7 +24,10 @@ export default function CreateAccountScreen() {
       return;
     }
 
+    setLoading(true);
+
     try {
+      // No key pair generation here (done after login)
       const response = await fetch(`${BASE_URL}/api/auth/register`, {
         method: 'POST',
         headers: {
@@ -35,12 +39,22 @@ export default function CreateAccountScreen() {
       const data = await response.json();
 
       if (data.success) {
-        Alert.alert('Success', 'Account created successfully');
+        Alert.alert('Success', 'Account created successfully', [
+          {
+            text: 'OK',
+            onPress: () => {
+              router.push('../login');
+            },
+          },
+        ]);
       } else {
         Alert.alert('Error', data.message);
       }
     } catch (error) {
+      console.error('Error in account creation:', error);
       Alert.alert('Error', 'An error occurred. Please try again.');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -88,9 +102,9 @@ export default function CreateAccountScreen() {
         onChangeText={setConfirmPassword}
       />
 
-      <TouchableOpacity onPress={handleCreateAccount}>
+      <TouchableOpacity onPress={handleCreateAccount} disabled={loading}>
         <LinearGradient style={styles.button} colors={["#FC80D1", "#C6FE4E"]}>
-          <Text style={styles.buttonText}>Create your account</Text>
+          <Text style={styles.buttonText}>{loading ? 'Creating...' : 'Create your account'}</Text>
         </LinearGradient>
       </TouchableOpacity>
     </View>
