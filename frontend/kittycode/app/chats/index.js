@@ -1,10 +1,8 @@
-// File: screens/MessagesScreen.js
-
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, TouchableOpacity, Image, StyleSheet, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 
-const MessagesScreen = ({ userId }) => { // userId is the JWT token here
+const MessagesScreen = ({ userId }) => {
   const router = useRouter();
   const [messagesData, setMessagesData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -13,10 +11,10 @@ const MessagesScreen = ({ userId }) => { // userId is the JWT token here
   useEffect(() => {
     const fetchChats = async () => {
       try {
-        const response = await fetch(`http://3.26.156.142:3000/api/chats/user`, { // Correct endpoint without userId in the URL
+        const response = await fetch(`https://b57d-122-163-78-156.ngrok-free.app/api/chats/user`, {
           headers: {
             'Content-Type': 'application/json',
-            Authorization: `Bearer ${userId}`, // Correctly using userId as the token in headers
+            Authorization: `Bearer ${userId}`,
           },
         });
 
@@ -39,35 +37,45 @@ const MessagesScreen = ({ userId }) => { // userId is the JWT token here
     };
 
     fetchChats();
-  }, [userId]); // userId is actually the JWT token
+  }, [userId]);
+
+  // Format timestamp for display
+  const formatTimestamp = (timestamp) => {
+    const date = new Date(timestamp);
+    return `${date.getHours()}:${date.getMinutes()}`;
+  };
 
   // Render each message item in the list
-  const renderMessageItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.messageItem}
-      onPress={() => router.push({
-          pathname: '../chatscreen',
-          params: { userId, friendId: item.friendId, friendName: item.name },
-      })}
-    >
-      {/* Profile Picture */}
-      <Image source={{ uri: item.avatar || 'https://via.placeholder.com/50' }} style={styles.avatar} />
+  // Render each message item in the list
+const renderMessageItem = ({ item }) => (
+  <TouchableOpacity
+    style={styles.messageItem}
+    onPress={() => router.push({
+      pathname: '../chatscreen',
+      params: { userId, friendId: item.friendId, friendName: item.friendName },
+    })}
+  >
+    {/* Profile Picture */}
+    <Image source={{ uri: item.avatar || 'https://via.placeholder.com/50' }} style={styles.avatar} />
 
-      {/* Message Details */}
-      <View style={styles.messageDetails}>
-        <Text style={styles.name}>{item.name}</Text>
-        <Text style={styles.lastMessage} numberOfLines={1}>
-          {item.lastMessage}
-        </Text>
-      </View>
+    {/* Message Details */}
+    <View style={styles.messageDetails}>
+      <Text style={styles.name}>{item.friendName}</Text>
+      <Text style={styles.lastMessage} numberOfLines={1}>
+        {item.lastMessage?.encryptedText || 'No messages yet'}  {/* Ensure lastMessage is a string */}
+      </Text>
+    </View>
 
-      {/* Time and Unread Indicator */}
-      <View style={styles.messageMeta}>
-        <Text style={styles.time}>{item.time}</Text>
-        {item.unread && <View style={styles.unreadIndicator} />}
-      </View>
-    </TouchableOpacity>
-  );
+    {/* Time and Unread Indicator */}
+    <View style={styles.messageMeta}>
+      <Text style={styles.time}>
+        {item.lastMessage ? formatTimestamp(item.lastMessage.timestamp) : ''}
+      </Text>
+      {item.unread && <View style={styles.unreadIndicator} />}
+    </View>
+  </TouchableOpacity>
+);
+
 
   if (loading) {
     return (

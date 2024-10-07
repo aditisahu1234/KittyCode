@@ -5,9 +5,9 @@ import { useRouter } from 'expo-router';
 
 const BASE_URL = "http://3.26.156.142:3000";
 
-const Friends = ({ userId }) => {
+const Friends = ({ userId, username }) => {
   const [isModalVisible, setIsModalVisible] = useState(false);
-  const [username, setUsername] = useState('');
+  const [friendUsername, setFriendUsername] = useState('');
   const [friends, setFriends] = useState([]);
   const router = useRouter();
 
@@ -45,13 +45,13 @@ const Friends = ({ userId }) => {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${userId}`,
         },
-        body: JSON.stringify({ toUsername: username }),
+        body: JSON.stringify({ toUsername: friendUsername }),
       });
       const data = await response.json();
       if (response.status === 200) {
-        Alert.alert('Invite Sent', `An invite has been sent to ${username}`);
+        Alert.alert('Invite Sent', `An invite has been sent to ${friendUsername}`);
         setIsModalVisible(false);
-        setUsername('');
+        setFriendUsername('');
       } else {
         Alert.alert('Error', data.message || 'Something went wrong');
       }
@@ -66,7 +66,7 @@ const Friends = ({ userId }) => {
       onPress={() => {
         router.push({
           pathname: '../chatscreen',
-          params: { userId, friendId: item._id, friendName: item.name },
+          params: { userId, username, friendId: item._id, friendName: item.name },
         });
       }}
     >
@@ -105,8 +105,8 @@ const Friends = ({ userId }) => {
             <TextInput
               style={styles.modalInput}
               placeholder="Enter username"
-              value={username}
-              onChangeText={setUsername}
+              value={friendUsername}  // Use friendUsername as the input value
+              onChangeText={setFriendUsername}  // Use setFriendUsername to update the input
             />
             <TouchableOpacity style={styles.modalButton} onPress={handleAddFriend}>
               <Text style={styles.modalButtonText}>Send Invite</Text>

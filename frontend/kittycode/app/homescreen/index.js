@@ -8,7 +8,7 @@ import Chats from '../chats';
 import Friends from '../friend';
 import { useFonts } from 'expo-font';
 
-const HomeScreen = () => {
+const HomeScreen = () => {  
   const [loaded, error] = useFonts({
     'Poppins-Regular': require('../../assets/fonts/Poppins-Regular.ttf'),
     'Poppins-SemiBold': require('../../assets/fonts/Poppins-SemiBold.ttf'),
@@ -85,9 +85,9 @@ const HomeScreen = () => {
 
       {/* Content Rendering Based on Selected Tab */}
       {selectedTab === 'Chats' ? (
-        <Chats userId={userId} />
+        <Chats userId={userId} username={username}/>
       ) : (
-        <Friends userId={userId} />
+        <Friends userId={userId} username={username}/>
       )}
     </SafeAreaView>
   );

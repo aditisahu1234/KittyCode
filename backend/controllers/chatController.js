@@ -1,152 +1,237 @@
 const Chat = require('../models/chatModel');
+const User = require('../models/userModel');
 const jwt = require('jsonwebtoken');
 
-// Decode JWT and get user ID
+// Helper function to get user ID from token
 const getUserIdFromToken = (token) => {
   try {
-    if (typeof token !== 'string') {
-      console.log('Invalid sender token:', token);  // Log the token if it's not a string
-      return null;
-    }
-
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    console.log(`Decoded sender ID: ${decoded.id}`);  // Log decoded ID for debugging
     return decoded.id;
   } catch (error) {
-    console.error('Error decoding JWT:', error);  // Log any JWT errors
     return null;
   }
 };
 
-// Create or fetch a chat room between two users
+// Exchange public keys between users
+exports.exchangePublicKeys = async (req, res) => {
+  const { friendId, publicKey } = req.body;
+
+  try {
+    const updatedUser = await User.findByIdAndUpdate(
+      req.user._id, 
+      { publicKey }, 
+      { new: true }
+    );
+
+    const friend = await User.findById(friendId);
+    if (!friend) {
+      return res.status(404).json({ message: 'Friend not found' });
+    }
+
+    if (!friend.publicKey) {
+      return res.status(400).json({ message: 'Friend does not have a public key' });
+    }
+
+    res.status(200).json({ 
+      friendPublicKey: friend.publicKey,
+      userPublicKey: updatedUser.publicKey 
+    });
+  } catch (error) {
+    res.status(500).json({ 
+      message: 'Error exchanging keys', 
+      error: error.message 
+    });
+  }
+};
+
+// Create or fetch a chat room
 exports.getChatRoom = async (req, res) => {
   const userId = req.user._id;
   const { friendId } = req.body;
 
   try {
+    console.log('Fetching or creating chat room for user:', userId, 'and friend:', friendId);
+
+    const currentUser = await User.findById(userId);
+    const friendUser = await User.findById(friendId);
+
+    if (!currentUser || !friendUser) {
+      return res.status(404).json({ message: 'User or Friend not found' });
+    }
+
+    if (!currentUser.publicKey) {
+      return res.status(400).json({ message: 'Your public key is missing. Exchange public keys before starting a chat.' });
+    }
+
+    if (!friendUser.publicKey) {
+      return res.status(400).json({ message: 'Friend does not have a public key. Please request them to exchange keys.' });
+    }
+
     let chat = await Chat.findOne({
       participants: { $all: [userId, friendId] }
-    });
+    }).populate('participants', 'publicKey name');
 
     if (!chat) {
+      console.log('No chat room found, creating a new one');
       chat = new Chat({
         participants: [userId, friendId]
       });
       await chat.save();
+      chat = await chat.populate('participants', 'publicKey name');
     }
 
-    res.status(200).json(chat);
+    const friend = chat.participants.find(
+      p => p._id.toString() !== userId.toString()
+    );
+
+    if (!friend || !friend.publicKey) {
+      console.error('Friend or friend public key not found');
+      return res.status(400).json({ message: 'Friend or public key not found' });
+    }
+
+    res.status(200).json({
+      _id: chat._id,
+      friendPublicKey: friend.publicKey,
+      friendName: friend.name
+    });
   } catch (error) {
+    console.error('Error fetching or creating chat room:', error.message);
     res.status(500).json({ message: 'Server Error', error: error.message });
   }
 };
 
-// Get chat messages for a room with isSender Flag
+// Get chat messages
 exports.getChatMessages = async (req, res) => {
   const { roomId } = req.params;
-  const userId = req.user._id;  // Assuming middleware sets req.user from JWT
 
   try {
-    const chat = await Chat.findById(roomId).populate('messages.sender', 'name');
+    const chat = await Chat.findById(roomId)
+      .populate('messages.sender', 'publicKey name')
+      .populate('participants', 'publicKey');
 
     if (!chat) {
       return res.status(404).json({ message: 'Chat room not found' });
     }
 
-    // Add 'isSender' field to each message
-    const messagesWithSenderFlag = chat.messages.map((message) => {
-      let senderId;
+    const formattedMessages = chat.messages.map(message => ({
+      _id: message._id,
+      sender: message.sender._id,
+      senderName: message.sender.name,
+      encryptedText: message.encryptedText,
+      timestamp: message.timestamp,
+      senderPublicKey: message.senderPublicKey
+    }));
 
-      // Check if the sender is already an object (from the database) or a JWT string
-      if (typeof message.sender === 'object' && message.sender._id) {
-        // Sender is an object (already populated from DB)
-        senderId = message.sender._id.toString();
-      } else {
-        // Sender is a JWT string (from incoming message)
-        senderId = getUserIdFromToken(message.sender);
-      }
-
-      console.log(`Final sender ID: ${senderId}`);
-
-      return {
-        ...message._doc,
-        isSender: senderId && senderId === userId.toString(),
-      };
-    });
-
-    res.status(200).json(messagesWithSenderFlag);
+    res.status(200).json(formattedMessages);
   } catch (error) {
-    res.status(500).json({ message: 'Server Error', error: error.message });
+    res.status(500).json({ 
+      message: 'Server Error', 
+      error: error.message 
+    });
   }
 };
 
-
-
-// Handle incoming message
+// Handle sending messages
 exports.handleSendMessage = async (roomId, message) => {
   try {
+    console.log('Received message:', message);  
+
     const userId = getUserIdFromToken(message.sender);
+    console.log('Extracted userId from token:', userId);
 
     if (!userId) {
-      throw new Error('Invalid token, unable to decode sender');
+      throw new Error('Invalid token');
+    }
+
+    const chat = await Chat.findById(roomId).populate('participants', 'publicKey');
+    if (!chat) {
+      throw new Error('Chat room not found');
     }
 
     const newMessage = {
       sender: userId,
-      text: message.text,
+      encryptedText: message.encryptedText,
       timestamp: new Date(),
+      senderPublicKey: message.senderPublicKey
     };
 
-    // Use atomic update to push a new message into the messages array
-    const updatedChat = await Chat.findByIdAndUpdate(
-      roomId,
-      { $push: { messages: newMessage } },
-      { new: true, useFindAndModify: false }
-    );
-
-    if (!updatedChat) {
-      throw new Error('Chat room not found');
+    if (!newMessage.encryptedText || !newMessage.senderPublicKey) {
+      throw new Error('Message data is incomplete: encryptedText or senderPublicKey is missing');
     }
 
-    return newMessage;
+    console.log('Validated new message:', newMessage);
+
+    chat.messages.push(newMessage);
+    console.log('Messages after push:', chat.messages);
+
+    // Validate all messages before saving
+    chat.messages.forEach((msg, index) => {
+      if (!msg.encryptedText || !msg.senderPublicKey) {
+        throw new Error(`Message at index ${index} is incomplete: encryptedText or senderPublicKey is missing`);
+      }
+    });
+
+    await chat.save();
+    console.log('Chat saved successfully');
+
+    const populatedChat = await Chat.findById(roomId).populate('messages.sender', 'publicKey name');
+    console.log('Populated Chat:', populatedChat);
+
+    const latestMessage = populatedChat.messages[populatedChat.messages.length - 1];
+    console.log('Latest Message:', latestMessage);
+
+    return {
+      _id: latestMessage._id,
+      sender: latestMessage.sender._id,
+      senderName: latestMessage.sender.name,
+      encryptedText: latestMessage.encryptedText,
+      timestamp: latestMessage.timestamp,
+      senderPublicKey: latestMessage.senderPublicKey
+    };
   } catch (error) {
+    console.error('Error handling send message:', error.message);
     throw error;
   }
 };
 
-// chatController.js
-
-// Fetch all chat rooms for the authenticated user that have messages
+// Get user's chat list
 exports.getUserChats = async (req, res) => {
-  const userId = req.user._id; // Correctly extract the user ID from the authenticated user
+  const userId = req.user._id;
 
   try {
-    // Find chats where the authenticated user is a participant and have at least one message
-    const chats = await Chat.find({ participants: userId, 'messages.0': { $exists: true } })
-      .populate('participants', 'name')
-      .populate('messages.sender', 'name')
-      .sort({ 'messages.timestamp': -1 }); // Sort by the latest message timestamp
+    const chats = await Chat.find({ 
+      participants: userId, 
+      'messages.0': { $exists: true } 
+    })
+    .populate('participants', 'name publicKey')
+    .populate('messages.sender', 'name publicKey')
+    .sort({ 'messages.timestamp': -1 });
 
-    // Format the data to send to the frontend
     const formattedChats = chats.map((chat) => {
       const lastMessage = chat.messages[chat.messages.length - 1];
-      const friend = chat.participants.find((p) => p._id.toString() !== userId.toString());
+      const friend = chat.participants.find(
+        p => p._id.toString() !== userId.toString()
+      );
 
       return {
         _id: chat._id,
         friendId: friend._id,
-        name: friend.name,
-        avatar: friend.avatar || 'https://via.placeholder.com/50', // Default avatar if not set
-        lastMessage: lastMessage.text,
-        time: new Date(lastMessage.timestamp).toLocaleTimeString(),
-        unread: false, // Implement your unread logic if needed
+        friendName: friend.name,
+        friendPublicKey: friend.publicKey,
+        lastMessage: {
+          encryptedText: lastMessage.encryptedText,
+          senderPublicKey: lastMessage.senderPublicKey,
+          timestamp: lastMessage.timestamp,
+          sender: lastMessage.sender._id
+        }
       };
     });
 
     res.status(200).json(formattedChats);
   } catch (error) {
-    res.status(500).json({ message: 'Server Error', error: error.message });
+    res.status(500).json({ 
+      message: 'Server Error', 
+      error: error.message 
+    });
   }
 };
-
-
