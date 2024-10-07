@@ -23,7 +23,91 @@ import { decode as decodeBase64 } from '@stablelib/base64';  // Import decodeBas
 import * as Keychain from 'react-native-keychain';  // Add this
 import { useRouter } from 'expo-router';
 
-const BASE_URL = "https://b57d-122-163-78-156.ngrok-free.app";
+import Realm from 'realm';
+
+// Define schema for chat messages
+const MessageSchema = {
+  name: 'Message',
+  properties: {
+    _id: 'string',
+    roomId: 'string',
+    senderId: 'string',
+    text: 'string',
+    timestamp: 'date',
+    isSender: 'bool',
+  },
+  primaryKey: '_id',
+};
+
+const openRealm = async () => {
+  return await Realm.open({
+    schema: [MessageSchema],
+  });
+};
+
+const saveMessageToRealm = async (message) => {
+  const realm = await openRealm();
+  try {
+    console.log('Attempting to save message to Realm:', message); // Logging the message before saving
+
+    realm.write(() => {
+      realm.create('Message', {
+        _id: message._id,              // Ensure unique message ID
+        roomId: message.roomId,         // Room ID of the chat
+        senderId: message.senderId,     // Username instead of userId
+        text: message.text,             // Decrypted message text
+        timestamp: new Date(message.timestamp),  // Message timestamp
+        isSender: message.isSender,     // Indicates if this message was sent by the user
+      }, 'modified');                   // 'modified' ensures existing entries are updated
+    });
+
+    console.log(`Message saved to Realm: ${message.text}`); // Confirm message was saved
+  } catch (error) {
+    console.error('Error saving message to Realm:', error); // Log any errors during save
+  } finally {
+    realm.close(); // Ensure the realm is closed after saving
+  }
+};
+
+const getMessagesFromRealm = async (roomId) => {
+  const realm = await openRealm();
+
+  try {
+    const messages = realm.objects('Message').filtered('roomId == $0', roomId).sorted('timestamp');
+
+    console.log('Retrieved messages from Realm:', messages.map(m => m.text)); // Log retrieved messages
+
+    const result = messages.map((msg) => ({
+      _id: msg._id,
+      roomId: msg.roomId,
+      senderId: msg.senderId,     // This will be `username` now
+      text: msg.text,
+      timestamp: msg.timestamp,
+      isSender: msg.isSender,     // Indicates if this message was sent by the user
+    }));
+
+    return result;
+  } catch (error) {
+    console.error('Error retrieving messages from Realm:', error); // Log any errors during retrieval
+    return [];
+  } finally {
+    realm.close(); // Ensure the realm is closed after retrieving messages
+  }
+};
+
+
+
+// Clear all messages from Realm (if needed)
+const clearMessagesFromRealm = async (roomId) => {
+  const realm = await openRealm();
+  realm.write(() => {
+    const messagesToDelete = realm.objects('Message').filtered('roomId == $0', roomId);
+    realm.delete(messagesToDelete);
+  });
+  realm.close();
+};
+
+const BASE_URL = "https://47cc-2401-4900-1c01-de12-10b7-f80a-e848-e9d.ngrok-free.app";
 const socket = io(BASE_URL, {
   autoConnect: false,
   reconnectionAttempts: 3,
@@ -41,70 +125,74 @@ const ChatScreen = () => {
   const [keyboardOffset, setKeyboardOffset] = useState(0);
 
   useEffect(() => {
-  const initializeChatRoom = async () => {
-    if (!userId || !friendId || !username) {
-      console.warn('userId, friendId, or username is missing');
-      return;
-    }
-
-    try {
-      console.log('Initializing chat room for user:', userId, ' with name :', username, ' with friend:', friendId);
-
-      const credentials = await Keychain.getGenericPassword();
-      let privateKey; // Define privateKey within the scope of the function
-
-      if (credentials && credentials.username === username) {
-        privateKey = decodeBase64(credentials.password); // Decode the stored private key
-        setUserPrivateKey(privateKey);  // Set the user's private key in state
-        console.log('User private key:', privateKey);  // Log the private key
-      } else {
-        console.error('No private key found for the user.');
+    const initializeChatRoom = async () => {
+      if (!userId || !friendId || !username) {
+        console.warn('userId, friendId, or username is missing');
         return;
       }
-
-      const response = await fetch(`${BASE_URL}/api/chats/room`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${userId}`,
-        },
-        body: JSON.stringify({ friendId }),
-      });
-
-      const data = await response.json();
-
-      if (!data._id || !data.friendPublicKey) {
-        console.error('Failed to retrieve room ID or friend public key:', data);
-        alert(data.message); 
-        return;
+  
+      try {
+        console.log('Initializing chat room for user:', userId, ' with name :', username, ' with friend:', friendId);
+  
+        const credentials = await Keychain.getGenericPassword();
+        let privateKey;
+  
+        if (credentials && credentials.username === username) {
+          privateKey = decodeBase64(credentials.password); // Decode stored private key
+          setUserPrivateKey(privateKey);
+          console.log('User private key:', privateKey);
+        } else {
+          console.error('No private key found for the user.');
+          return;
+        }
+  
+        const response = await fetch(`${BASE_URL}/api/chats/room`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${userId}`,
+          },
+          body: JSON.stringify({ friendId }),
+        });
+  
+        const data = await response.json();
+  
+        if (!data._id || !data.friendPublicKey) {
+          console.error('Failed to retrieve room ID or friend public key:', data);
+          alert(data.message); 
+          return;
+        }
+  
+        console.log('Friend public key received:', data.friendPublicKey);
+  
+        const friendPublicKeyUint8Array = decodeBase64(data.friendPublicKey);
+        setRoomId(data._id);
+        setFriendPublicKey(friendPublicKeyUint8Array);
+        
+        if (!privateKey || !friendPublicKeyUint8Array) {
+          console.error('Keys missing, cannot initialize chat.');
+          return;
+        }
+  
+        // Load messages from Realm first
+        const localMessages = await getMessagesFromRealm(data._id);
+        setMessages(localMessages);
+  
+        socket.connect();
+        socket.emit('joinRoom', data._id);
+  
+        // Fetch new messages from server after loading local ones
+        await fetchMessages(data._id, privateKey);
+      } catch (error) {
+        console.error('Error initializing chat room:', error.message);
       }
-
-      console.log('Friend public key received:', data.friendPublicKey);
-
-      const friendPublicKeyUint8Array = decodeBase64(data.friendPublicKey);
-      setRoomId(data._id);
-      setFriendPublicKey(friendPublicKeyUint8Array);
-      
-      if (!privateKey || !friendPublicKeyUint8Array) {
-        console.error('Keys missing, cannot initialize chat.');
-        return;
-      }
-      
-      socket.connect();
-      
-      socket.connect();
-      socket.emit('joinRoom', data._id);
-
-      await fetchMessages(data._id, privateKey); // Use the privateKey here
-    } catch (error) {
-      console.error('Error initializing chat room:', error.message);
-    }
-  };
-
-  initializeChatRoom();
-
-  return () => socket.disconnect();
-}, [userId, friendId, username]);
+    };
+  
+    initializeChatRoom();
+  
+    return () => socket.disconnect();
+  }, [userId, friendId, username]);
+  
 
   
   const fetchMessages = async (roomId, privateKey) => {
@@ -131,12 +219,28 @@ const ChatScreen = () => {
         encryptedMessages.map(async (message) => {
           try {
             const decryptedMessage = await receiveMessage(
-              privateKey,  // Use the private key to decrypt the message
+              privateKey,
               message.senderPublicKey,
               null,
               message.encryptedText
             );
-            return { ...message, text: decryptedMessage, isSender: message.sender === userId };
+  
+            // For locally storing, use the username instead of userId
+            const messageForLocal = {
+              ...message,
+              text: decryptedMessage,
+              senderId: message.sender === userId ? username : message.sender,  // Map userId to username locally
+              isSender: message.sender === userId,     // Indicates if this message was sent by the user
+            };
+  
+            // Save the decrypted message to Realm with `username`
+            await saveMessageToRealm({
+              ...messageForLocal,
+              roomId: roomId,
+              timestamp: message.timestamp,
+            });
+  
+            return messageForLocal;
           } catch (decryptError) {
             console.error('Error decrypting message:', decryptError);
             return { ...message, text: 'Error decrypting message', isSender: message.sender === userId };
@@ -144,11 +248,14 @@ const ChatScreen = () => {
         })
       );
   
-      setMessages(decryptedMessages);
+      // Update state with new decrypted messages
+      setMessages((prevMessages) => [...prevMessages, ...decryptedMessages]);
     } catch (error) {
       console.log('Error fetching messages:', error.message);
     }
   };
+  
+  
   
 
   useEffect(() => {
@@ -156,25 +263,50 @@ const ChatScreen = () => {
   
     socket.on('receiveMessage', async (message) => {
       try {
+        console.log('Message received from server:', message);
+  
+        // Decrypt the incoming message
         const decryptedMessage = await receiveMessage(
-          userPrivateKey,  // Use the private key to decrypt the incoming message
+          userPrivateKey,
           message.senderPublicKey,
           null,
           message.encryptedText
         );
   
-        setMessages((prevMessages) => [...prevMessages, { ...message, text: decryptedMessage }]);
+        console.log('Decrypted message:', decryptedMessage);
+  
+        // Prepare the message for local storage (with roomId and username instead of userId)
+        const messageForLocal = {
+          _id: message._id,
+          roomId: message.roomId,         // Room ID from the chat
+          senderId: message.sender,     // Sender ID, received from server
+          text: decryptedMessage,         // Decrypted message text
+          timestamp: message.timestamp,
+          isSender: false,                // Indicates this message was received (not sent by the user)
+        };
+  
+        // Save the decrypted message to Realm
+        await saveMessageToRealm(messageForLocal);
+  
+        // Notify the backend that the message has been decrypted
+        socket.emit('messageDecrypted', { roomId: message.roomId, messageId: message._id });
+  
+        // Update the UI state with the newly received message
+        setMessages((prevMessages) => [...prevMessages, messageForLocal]);
   
         if (isAtBottom) {
           flatListRef.current?.scrollToEnd({ animated: true });
         }
       } catch (error) {
-        console.error('Error handling received message:', error);
+        console.error('Error decrypting message:', error);
       }
     });
   
     return () => socket.off('receiveMessage');
-  }, [isAtBottom, userPrivateKey]);
+  }, [isAtBottom, userPrivateKey, roomId]);
+    // Add roomId as a dependency
+  
+  
   
 
   const handleSendMessage = async () => {
@@ -197,29 +329,46 @@ const ChatScreen = () => {
         inputMessage
       );
   
-      // Create a properly formatted message object
-      const message = {
-        sender: userId,
+      // Message to send to the server (with userId)
+      const messageForServer = {
+        _id: Date.now().toString(), // Generate a unique message ID
+        roomId: roomId,
+        sender: userId,             // Use the userId for server communication
         encryptedText: encryptedMessage,
         timestamp: new Date().toISOString(),
-        senderPublicKey: newDhPublicKey, // Make sure this is included
+        senderPublicKey: newDhPublicKey
       };
   
-      console.log('Sending encrypted message:', message);
-      socket.emit('sendMessage', { roomId, message });
+      console.log('Sending encrypted message to server:', messageForServer);
+      socket.emit('sendMessage', { roomId, message: messageForServer });
   
-      // Add message to local state
+      // Message to save locally (with username)
+      const messageForLocal = {
+        _id: messageForServer._id,  // Same message ID
+        roomId: roomId,
+        senderId: username,         // Use the username for local storage in Realm
+        text: inputMessage,         // Save the plain text in local storage
+        timestamp: messageForServer.timestamp,
+        isSender: true,             // Indicates this message was sent by the user
+      };
+  
+      // Save the decrypted message to Realm (with username)
+      await saveMessageToRealm(messageForLocal);  // Store using `username` for local DB
+  
+      // Add message to local state for immediate display
       setMessages((prevMessages) => [
         ...prevMessages,
-        { ...message, text: inputMessage, isSender: true }
+        messageForLocal,  // Add locally saved message (with username)
       ]);
-      
+  
       setInputMessage('');
     } catch (error) {
       console.error('Error sending message:', error);
       Alert.alert('Error', 'Failed to send message. Please try again.');
     }
   };
+  
+  
 
   const renderMessage = ({ item }) => (
     <View style={[

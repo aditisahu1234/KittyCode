@@ -18,4 +18,23 @@ const connectDB = async () => {
   }
 };
 
+// // Function to drop the database
+// const cleanDatabase = async () => {
+//   try {
+//     await mongoose.connection.db.dropDatabase();
+//     console.log('Database dropped successfully');
+//   } catch (error) {
+//     console.error('Error dropping database:', error.message);
+//   }
+// };
+
+// // Usage
+// const cleanDB = async () => {
+//   await connectDB();
+//   await cleanDatabase();
+//   process.exit();
+// };
+
+// cleanDB();
+
 module.exports = connectDB;

@@ -11,7 +11,7 @@ const MessagesScreen = ({ userId }) => {
   useEffect(() => {
     const fetchChats = async () => {
       try {
-        const response = await fetch(`https://b57d-122-163-78-156.ngrok-free.app/api/chats/user`, {
+        const response = await fetch(`https://47cc-2401-4900-1c01-de12-10b7-f80a-e848-e9d.ngrok-free.app/api/chats/user`, {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${userId}`,

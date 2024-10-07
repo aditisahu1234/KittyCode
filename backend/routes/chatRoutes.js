@@ -11,4 +11,5 @@ router.get('/user', protect, getUserChats); // Fetch user chats
 // New route for exchanging public keys
 router.post('/exchange-keys', protect, exchangePublicKeys);
 
+
 module.exports = router;

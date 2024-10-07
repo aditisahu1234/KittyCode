@@ -1,4 +1,3 @@
-// chatModel.js
 const mongoose = require('mongoose');
 
 const messageSchema = new mongoose.Schema({
@@ -18,6 +17,11 @@ const messageSchema = new mongoose.Schema({
   senderPublicKey: { 
     type: String, 
     required: true 
+  },
+  status: { 
+    type: String, 
+    enum: ['pending', 'sent'],  // Change 'unsent' to 'pending'
+    default: 'pending'          // Default status is now 'pending'
   }
 }, { _id: true });
 
@@ -26,7 +30,7 @@ const chatSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'User' 
   }],
-  messages: [messageSchema],
+  messages: [messageSchema],     // Embed the message schema
 }, { 
   timestamps: true 
 });
