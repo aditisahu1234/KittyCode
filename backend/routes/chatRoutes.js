@@ -1,5 +1,5 @@
 const express = require('express');
-const { getChatRoom, getChatMessages, getUserChats, exchangePublicKeys } = require('../controllers/chatController');
+const { getChatRoom, getChatMessages, getUserChats, exchangePublicKeys, markMessageAsSent } = require('../controllers/chatController');
 const protect = require('../middleware/authMiddleware');
 
 const router = express.Router();
@@ -10,6 +10,7 @@ router.get('/user', protect, getUserChats); // Fetch user chats
 
 // New route for exchanging public keys
 router.post('/exchange-keys', protect, exchangePublicKeys);
+router.patch('/:roomId/messages/:messageId/sent', protect, markMessageAsSent);
 
 
 module.exports = router;

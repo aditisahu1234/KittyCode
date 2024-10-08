@@ -107,6 +107,27 @@ const clearMessagesFromRealm = async (roomId) => {
   realm.close();
 };
 
+const markMessageAsSent = async (roomId, messageId, userId) => {
+  try {
+    const response = await fetch(`${BASE_URL}/api/chats/${roomId}/messages/${messageId}/sent`, {
+      method: 'PATCH',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${userId}`,  // Assuming you are using JWT for auth
+      },
+    });
+
+    if (!response.ok) {
+      console.error('Failed to mark message as sent');
+    } else {
+      console.log(`Message ${messageId} marked as sent`);
+    }
+  } catch (error) {
+    console.error('Error marking message as sent:', error);
+  }
+};
+
+
 const BASE_URL = "https://47cc-2401-4900-1c01-de12-10b7-f80a-e848-e9d.ngrok-free.app";
 const socket = io(BASE_URL, {
   autoConnect: false,
@@ -239,7 +260,12 @@ const ChatScreen = () => {
               roomId: roomId,
               timestamp: message.timestamp,
             });
-  
+            
+              // If the message status is still pending, mark it as sent
+            if (message.status === 'pending') {
+              await markMessageAsSent(roomId, message._id, userId);
+            }
+
             return messageForLocal;
           } catch (decryptError) {
             console.error('Error decrypting message:', decryptError);
@@ -255,9 +281,6 @@ const ChatScreen = () => {
     }
   };
   
-  
-  
-
   useEffect(() => {
     if (!userPrivateKey) return;
   
@@ -278,7 +301,7 @@ const ChatScreen = () => {
         // Prepare the message for local storage (with roomId and username instead of userId)
         const messageForLocal = {
           _id: message._id,
-          roomId: message.roomId,         // Room ID from the chat
+          roomId: roomId,         // Room ID from the chat
           senderId: message.sender,     // Sender ID, received from server
           text: decryptedMessage,         // Decrypted message text
           timestamp: message.timestamp,
@@ -287,9 +310,10 @@ const ChatScreen = () => {
   
         // Save the decrypted message to Realm
         await saveMessageToRealm(messageForLocal);
-  
-        // Notify the backend that the message has been decrypted
-        socket.emit('messageDecrypted', { roomId: message.roomId, messageId: message._id });
+        console.log(`Marking message as sent - roomId: ${roomId}, messageId: ${message._id}`);
+
+        // Notify the backend that the message has been received and decrypted
+        await markMessageAsSent(roomId, message._id, userId);  // Call function to mark message as sent
   
         // Update the UI state with the newly received message
         setMessages((prevMessages) => [...prevMessages, messageForLocal]);
@@ -303,7 +327,8 @@ const ChatScreen = () => {
     });
   
     return () => socket.off('receiveMessage');
-  }, [isAtBottom, userPrivateKey, roomId]);
+  }, [userId,isAtBottom, userPrivateKey, roomId]);
+  
     // Add roomId as a dependency
   
   

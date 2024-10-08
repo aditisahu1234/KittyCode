@@ -115,7 +115,7 @@ exports.getChatMessages = async (req, res) => {
     }
 
     // Filter to get only unsent messages
-    const unsentMessages = chat.messages.filter(message => message.status === 'unsent');
+    const unsentMessages = chat.messages.filter(message => message.status === 'pending');
     
     console.log(`Fetched unsent messages for room ${roomId}:`, unsentMessages);
 
@@ -137,6 +137,7 @@ exports.getChatMessages = async (req, res) => {
     });
   }
 };
+
 
 
 // Handle sending messages
@@ -198,32 +199,30 @@ exports.handleSendMessage = async (roomId, message) => {
   }
 };
 
-// Function to mark the message as sent
-exports.markMessageAsSent = async (roomId, messageId) => {
+// Mark a message as 'sent' after delivery
+exports.markMessageAsSent = async (req, res) => {
+  const { roomId, messageId } = req.params;
+
   try {
     const chat = await Chat.findById(roomId);
     if (!chat) {
-      throw new Error('Chat room not found');
+      return res.status(404).json({ message: 'Chat room not found' });
     }
 
     const message = chat.messages.id(messageId);
     if (!message) {
-      throw new Error('Message not found');
+      return res.status(404).json({ message: 'Message not found' });
     }
 
-    // Mark the message as sent
+    // Mark the message as 'sent'
     message.status = 'sent';
-    await chat.save();  // Save the updated chat
+    await chat.save();
 
-    console.log(`Message marked as sent. Message ID: ${message._id}, Status: ${message.status}`);
-    return message;
+    res.status(200).json({ message: 'Message marked as sent' });
   } catch (error) {
-    console.error('Error marking message as sent:', error.message);
-    throw error;
+    res.status(500).json({ message: 'Server Error', error: error.message });
   }
 };
-
-
 
 
 

@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, TouchableOpacity, Image, StyleSheet, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 
-const MessagesScreen = ({ userId }) => {
+const MessagesScreen = ({ userId, username }) => {
   const router = useRouter();
   const [messagesData, setMessagesData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -52,7 +52,7 @@ const renderMessageItem = ({ item }) => (
     style={styles.messageItem}
     onPress={() => router.push({
       pathname: '../chatscreen',
-      params: { userId, friendId: item.friendId, friendName: item.friendName },
+      params: { userId,username, friendId: item.friendId, friendName: item.friendName },
     })}
   >
     {/* Profile Picture */}
