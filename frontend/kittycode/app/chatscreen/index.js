@@ -9,10 +9,15 @@ import {
   Image, 
   KeyboardAvoidingView, 
   Platform, 
-  Keyboard 
+  Keyboard,
+  PermissionsAndroid,
+  Animated
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';import { useLocalSearchParams } from 'expo-router';
 import { AntDesign, MaterialIcons } from '@expo/vector-icons';
+import DocumentPicker from 'react-native-document-picker';
+import { launchImageLibrary } from 'react-native-image-picker';
+import { Audio } from 'expo-av';  // For audio recording
 import io from 'socket.io-client';
 import { 
   getPrivateKey, 
@@ -138,6 +143,12 @@ const ChatScreen = () => {
   const { userId, username, friendId, friendName } = useLocalSearchParams();
   const [messages, setMessages] = useState([]);
   const [inputMessage, setInputMessage] = useState('');
+  const [isOptionsVisible, setIsOptionsVisible] = useState(false);  // State for plus button options
+  const [recordingDuration, setRecordingDuration] = useState(0);
+  const [recording, setRecording] = useState(null);  // State for audio recording
+  const [isRecording, setIsRecording] = useState(false);  // To track recording state
+  const [pulseAnim] = useState(new Animated.Value(1));  // For pulsating animation
+  const timerRef = useRef(null);  // Reference for the recording timer
   const [roomId, setRoomId] = useState(null);
   const [isAtBottom, setIsAtBottom] = useState(true);
   const [userPrivateKey, setUserPrivateKey] = useState(null);  // User's private key
@@ -261,11 +272,11 @@ const ChatScreen = () => {
               timestamp: message.timestamp,
             });
             
-              // If the message status is still pending, mark it as sent
-            if (message.status === 'pending') {
-              await markMessageAsSent(roomId, message._id, userId);
-            }
-
+            // If the message status is still pending, mark it as sent
+          if (message.status === 'pending') {
+            await markMessageAsSent(roomId, message._id, userId);
+          }
+          
             return messageForLocal;
           } catch (decryptError) {
             console.error('Error decrypting message:', decryptError);
@@ -425,6 +436,173 @@ const ChatScreen = () => {
 
   const insets = useSafeAreaInsets();
 
+  // Function to handle file selection
+  const handleFileSelect = async () => {
+    try {
+      const result = await DocumentPicker.pick({
+        type: [DocumentPicker.types.allFiles],
+      });
+      console.log('Selected file: ', result);
+      // You can now send this file in your message
+    } catch (err) {
+      if (DocumentPicker.isCancel(err)) {
+        console.log('User canceled file picker');
+      } else {
+        console.error('File picking error:', err);
+      }
+    }
+  };
+
+  // Function to handle image selection
+  const handleImageSelect = async () => {
+    launchImageLibrary({ mediaType: 'photo' }, (response) => {
+      if (response.didCancel) {
+        console.log('User cancelled image picker');
+      } else if (response.errorMessage) {
+        console.error('Image picker error:', response.errorMessage);
+      } else {
+        console.log('Selected image: ', response.assets);
+        // You can now send this image in your message
+      }
+    });
+  };
+
+  // Function to handle video selection
+  const handleVideoSelect = async () => {
+    launchImageLibrary({ mediaType: 'video' }, (response) => {
+      if (response.didCancel) {
+        console.log('User cancelled video picker');
+      } else if (response.errorMessage) {
+        console.error('Video picker error:', response.errorMessage);
+      } else {
+        console.log('Selected video: ', response.assets);
+        // You can now send this video in your message
+      }
+    });
+  };
+
+  //Audio Permission
+  const getAudioPermissions = async () => {
+    try {
+      if (Platform.OS === 'android') {
+        const granted = await PermissionsAndroid.request(
+          PermissionsAndroid.PERMISSIONS.RECORD_AUDIO,
+          {
+            title: 'Audio Recording Permission',
+            message:
+              'This app needs access to your microphone to record audio.',
+            buttonNeutral: 'Ask Me Later',
+            buttonNegative: 'Cancel',
+            buttonPositive: 'OK',
+          }
+        );
+        return granted === PermissionsAndroid.RESULTS.GRANTED;
+      } 
+      return true; // For iOS, permission is handled differently.
+    } catch (err) {
+      console.warn(err);
+      return false;
+    }
+  };
+
+  // Start pulsating animation
+  const startPulseAnimation = () => {
+    Animated.loop(
+      Animated.sequence([
+        Animated.timing(pulseAnim, {
+          toValue: 1.5,
+          duration: 700,
+          useNativeDriver: true,
+        }),
+        Animated.timing(pulseAnim, {
+          toValue: 1,
+          duration: 700,
+          useNativeDriver: true,
+        }),
+      ])
+    ).start();
+  };
+
+  const stopPulseAnimation = () => {
+    pulseAnim.stopAnimation();
+  };
+
+
+  const startRecording = async () => {
+    try {
+      // If a recording is already in progress, stop it before starting a new one
+      if (recording) {
+        if (recording.isRecording) {
+          console.warn('A recording is already in progress, stopping the current recording...');
+          await stopRecording();  // Stop and reset before starting new recording
+        }
+      }
+  
+      const hasPermission = await getAudioPermissions();
+      if (!hasPermission) {
+        console.error('Audio recording permissions not granted');
+        return;
+      }
+  
+      console.log('Starting recording...');
+      await Audio.setAudioModeAsync({
+        allowsRecordingIOS: true,
+        playsInSilentModeIOS: true,
+      });
+  
+      const newRecording = new Audio.Recording(); // Create a new instance
+      await newRecording.prepareToRecordAsync(Audio.RECORDING_OPTIONS_PRESET_HIGH_QUALITY);
+      await newRecording.startAsync(); // Start recording
+      setRecording(newRecording); // Store the recording instance in state
+      setIsRecording(true);
+      setRecordingDuration(0);
+      startPulseAnimation();
+  
+      // Start the timer
+      timerRef.current = setInterval(() => {
+        setRecordingDuration(prevDuration => prevDuration + 1);
+      }, 1000);
+  
+      console.log('Recording started');
+    } catch (err) {
+      console.error('Failed to start recording', err);
+    }
+  };
+  
+  
+  const stopRecording = async () => {
+    if (!recording) {
+      console.warn('No active recording to stop');
+      return;
+    }
+  
+    try {
+      console.log('Stopping recording...');
+      clearInterval(timerRef.current);  // Stop the timer
+      setRecordingDuration(0);  // Reset timer
+      setIsRecording(false);
+      stopPulseAnimation();
+  
+      await recording.stopAndUnloadAsync(); // Stop and unload the recording
+      const uri = recording.getURI();
+      console.log('Recording stopped and stored at', uri);
+  
+      // Reset the recording state to null only after fully stopping
+      setRecording(null); 
+    } catch (err) {
+      console.error('Failed to stop recording', err);
+    }
+  };
+  
+  
+
+  // Convert seconds to MM:SS format
+  const formatDuration = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = seconds % 60;
+    return `${mins}:${secs < 10 ? '0' : ''}${secs}`;
+  };
+
   return (
     <SafeAreaView style={styles.container} edges={['bottom']}>
       <View style={styles.header}>
@@ -476,8 +654,11 @@ const ChatScreen = () => {
         )}
 
         <View style={styles.inputContainer}>
-          <TouchableOpacity style={styles.attachmentButton}>
-            <MaterialIcons name="add" size={24} color="#616BFC" />
+          <TouchableOpacity 
+            style={styles.attachmentButton}
+            onPress={() => setIsOptionsVisible(!isOptionsVisible)}
+            >
+              <MaterialIcons name="add" size={24} color="#616BFC" />
           </TouchableOpacity>
           <TextInput
             style={styles.input}
@@ -486,9 +667,16 @@ const ChatScreen = () => {
             placeholder="Type here..."
             multiline
           />
-          <TouchableOpacity style={styles.microphoneButton}>
-            <MaterialIcons name="mic" size={24} color="#616BFC" />
-          </TouchableOpacity>
+
+          {/* Pulsating microphone button */}
+          <Animated.View style={[styles.microphoneButton, { transform: [{ scale: pulseAnim }] }]}>
+            <TouchableOpacity 
+              onPress={recording ? stopRecording : startRecording}
+            >
+              <MaterialIcons name={recording ? "stop" : "mic"} size={24} color={isRecording ? "#ff4d4d" : "#616BFC"} />
+            </TouchableOpacity>
+          </Animated.View>
+
           <TouchableOpacity 
             onPress={handleSendMessage}
             style={[
@@ -499,7 +687,33 @@ const ChatScreen = () => {
           >
             <MaterialIcons name="send" size={24} color="#fff" />
           </TouchableOpacity>
+
+          {/* Options menu for file/image/video selection */}
+          {isOptionsVisible && (
+            <View style={styles.optionsContainer}>
+              <TouchableOpacity style={styles.optionButton} onPress={handleFileSelect}>
+                <MaterialIcons name="attach-file" size={24} color="#616BFC" />
+                <Text>File</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.optionButton} onPress={handleImageSelect}>
+                <MaterialIcons name="photo" size={24} color="#616BFC" />
+                <Text>Image</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.optionButton} onPress={handleVideoSelect}>
+                <MaterialIcons name="videocam" size={24} color="#616BFC" />
+                <Text>Video</Text>
+              </TouchableOpacity>
+            </View>
+          )}
         </View>
+
+        {/* Show the timer when recording */}
+        {isRecording && (
+          <View style={styles.recordingTimerContainer}>
+            <Text style={styles.timer}>{formatDuration(recordingDuration)}</Text>
+          </View>
+        )}
+
       </KeyboardAvoidingView>
     </SafeAreaView>
   );
@@ -601,6 +815,43 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     padding: 10,
     marginLeft: 10,
+  },
+  optionsContainer: {
+    position: 'absolute',
+    bottom: 60,
+    left: 20,
+    right: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    elevation: 3,
+    padding: 10,
+  },
+  optionButton: {
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  recordingTimerContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 10,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 10,
+    marginVertical: 5,
+    position: 'absolute',
+    bottom: 100, // Adjust the position above the input bar
+    alignSelf: 'center',
+  },
+  timer: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: '#fff',
+  },
+  microphoneButton: {
+    padding: 10,
+    // Style for microphone button with dynamic scaling
   },
   scrollToBottomButton: {
     position: 'absolute',
