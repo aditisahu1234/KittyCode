@@ -24,10 +24,11 @@ import {
   sendMessage, 
   receiveMessage 
 } from '../utils/crypto';
-import { decode as decodeBase64 } from '@stablelib/base64';  // Import decodeBase64 from stablelib
+import { encode as encodeBase64 ,decode as decodeBase64 } from '@stablelib/base64';  // Import decodeBase64 from stablelib
 import * as Keychain from 'react-native-keychain';  // Add this
 import { useRouter } from 'expo-router';
-
+import ImageResizer from 'react-native-image-resizer';
+import RNFS from 'react-native-fs';
 import Realm from 'realm';
 
 // Define schema for chat messages
@@ -37,12 +38,18 @@ const MessageSchema = {
     _id: 'string',
     roomId: 'string',
     senderId: 'string',
-    text: 'string',
+    text: 'string?',   // This will store either text, base64 image, or null for files
+    file: 'string?',    // New field to store base64-encoded file data (nullable)
+    fileName: 'string?', // Store file name if a file is being sent
+    fileType: 'string?', // Store file type (MIME type, e.g., 'application/pdf')
     timestamp: 'date',
     isSender: 'bool',
+    type: 'string?',   // Add 'type' to distinguish between 'text', 'image', or 'file'
   },
   primaryKey: '_id',
 };
+
+
 
 const openRealm = async () => {
   return await Realm.open({
@@ -60,13 +67,17 @@ const saveMessageToRealm = async (message) => {
         _id: message._id,              // Ensure unique message ID
         roomId: message.roomId,         // Room ID of the chat
         senderId: message.senderId,     // Username instead of userId
-        text: message.text,             // Decrypted message text
+        text: message.text || null,     // Decrypted message text or null for files
+        file: message.file || null,     // Base64-encoded file data
+        fileName: message.fileName || null, // File name
+        fileType: message.fileType || null, // File type
         timestamp: new Date(message.timestamp),  // Message timestamp
         isSender: message.isSender,     // Indicates if this message was sent by the user
-      }, 'modified');                   // 'modified' ensures existing entries are updated
+        type: message.type || 'text'    // Determine if it's a 'text', 'image', or 'file'
+      }, 'modified');  // 'modified' ensures existing entries are updated
     });
 
-    console.log(`Message saved to Realm: ${message.text}`); // Confirm message was saved
+    console.log(`Message saved to Realm: ${message.text || message.fileName}`); // Confirm message was saved
   } catch (error) {
     console.error('Error saving message to Realm:', error); // Log any errors during save
   } finally {
@@ -74,21 +85,26 @@ const saveMessageToRealm = async (message) => {
   }
 };
 
+
 const getMessagesFromRealm = async (roomId) => {
   const realm = await openRealm();
 
   try {
     const messages = realm.objects('Message').filtered('roomId == $0', roomId).sorted('timestamp');
 
-    console.log('Retrieved messages from Realm:', messages.map(m => m.text)); // Log retrieved messages
+    console.log('Retrieved messages from Realm:', messages.map(m => m.text || m.fileName)); // Log retrieved messages
 
     const result = messages.map((msg) => ({
       _id: msg._id,
       roomId: msg.roomId,
-      senderId: msg.senderId,     // This will be `username` now
-      text: msg.text,
+      senderId: msg.senderId,        // This will be `username` now
+      text: msg.text || null,        // Handle text or null for file messages
+      file: msg.file || null,        // Base64-encoded file data (null if not a file)
+      fileName: msg.fileName || null, // File name (for file messages)
+      fileType: msg.fileType || null, // File type (for file messages)
       timestamp: msg.timestamp,
-      isSender: msg.isSender,     // Indicates if this message was sent by the user
+      isSender: msg.isSender,        // Indicates if this message was sent by the user
+      type: msg.type || 'text',      // Either 'text', 'image', or 'file'
     }));
 
     return result;
@@ -99,6 +115,7 @@ const getMessagesFromRealm = async (roomId) => {
     realm.close(); // Ensure the realm is closed after retrieving messages
   }
 };
+
 
 
 
@@ -306,32 +323,66 @@ const ChatScreen = () => {
           null,
           message.encryptedText
         );
-  
+
         console.log('Decrypted message:', decryptedMessage);
-  
-        // Prepare the message for local storage (with roomId and username instead of userId)
-        const messageForLocal = {
-          _id: message._id,
-          roomId: roomId,         // Room ID from the chat
-          senderId: message.sender,     // Sender ID, received from server
-          text: decryptedMessage,         // Decrypted message text
-          timestamp: message.timestamp,
-          isSender: false,                // Indicates this message was received (not sent by the user)
-        };
+        
+        // // Prepare the message for local storage (with roomId and username instead of userId)
+        // const messageForLocal = {
+        //   _id: message._id,
+        //   roomId: roomId,         // Room ID from the chat
+        //   senderId: message.sender,     // Sender ID, received from server
+        //   text: decryptedMessage.image || decryptedMessage,  // Handle text or image
+        //   timestamp: message.timestamp,
+        //   isSender: false,                // Indicates this message was received (not sent by the user)
+        //   type: message.type || 'text'
+        // };
+
+        let finalMessage;
+        if (message.type === 'file') {
+          // Parse the decrypted file data
+          const fileData = JSON.parse(decryptedMessage);
+          finalMessage = {
+            _id: message._id,
+            roomId: roomId,
+            senderId: message.sender,
+            text: fileData.file,
+            fileName: message.fileName,
+            fileType: message.fileType,
+            timestamp: message.timestamp,
+            isSender: false,
+            type: 'file'
+          };
+        } else {
+          // Handle other message types as before
+          finalMessage = {
+            _id: message._id,
+            roomId: roomId,
+            senderId: message.sender,
+            text: decryptedMessage,
+            timestamp: message.timestamp,
+            isSender: false,
+            type: message.type || 'text'
+          };
+        }
   
         // Save the decrypted message to Realm
-        await saveMessageToRealm(messageForLocal);
+        // await saveMessageToRealm(messageForLocal);
+        await saveMessageToRealm(finalMessage);
         console.log(`Marking message as sent - roomId: ${roomId}, messageId: ${message._id}`);
 
+        setMessages(prevMessages => [...prevMessages, finalMessage]);
         // Notify the backend that the message has been received and decrypted
-        await markMessageAsSent(roomId, message._id, userId);  // Call function to mark message as sent
-  
-        // Update the UI state with the newly received message
-        setMessages((prevMessages) => [...prevMessages, messageForLocal]);
-  
+
         if (isAtBottom) {
           flatListRef.current?.scrollToEnd({ animated: true });
         }
+        
+        await markMessageAsSent(roomId, message._id, userId);  // Call function to mark message as sent
+  
+        // Update the UI state with the newly received message
+        // setMessages((prevMessages) => [...prevMessages, messageForLocal]);
+  
+        
       } catch (error) {
         console.error('Error decrypting message:', error);
       }
@@ -343,8 +394,6 @@ const ChatScreen = () => {
     // Add roomId as a dependency
   
   
-  
-
   const handleSendMessage = async () => {
     if (!inputMessage.trim()) {
       console.warn('Message is missing');
@@ -372,7 +421,8 @@ const ChatScreen = () => {
         sender: userId,             // Use the userId for server communication
         encryptedText: encryptedMessage,
         timestamp: new Date().toISOString(),
-        senderPublicKey: newDhPublicKey
+        senderPublicKey: newDhPublicKey,
+        type: 'text'
       };
   
       console.log('Sending encrypted message to server:', messageForServer);
@@ -385,7 +435,8 @@ const ChatScreen = () => {
         senderId: username,         // Use the username for local storage in Realm
         text: inputMessage,         // Save the plain text in local storage
         timestamp: messageForServer.timestamp,
-        isSender: true,             // Indicates this message was sent by the user
+        isSender: true,
+        type: 'text'             // Indicates this message was sent by the user
       };
   
       // Save the decrypted message to Realm (with username)
@@ -404,24 +455,216 @@ const ChatScreen = () => {
     }
   };
   
-  
+  // Send Image (with Encryption) to Server
+  // const handleSendImage = async (base64Image) => {
+  //   if (!roomId || !userPrivateKey || !friendPublicKey) {
+  //     console.warn('Room ID, private key, or friend public key is missing');
+  //     return;
+  //   }
 
-  const renderMessage = ({ item }) => (
-    <View style={[
-      styles.messageItem,
-      item.isSender ? styles.myMessage : styles.receivedMessage // Use isSender to decide the style
-    ]}>
-      <Text style={styles.messageText}>{item.text}</Text>
-      <Text style={styles.messageTime}>
-        {new Date(item.timestamp).toLocaleTimeString([], { 
-          hour: '2-digit', 
-          minute: '2-digit' 
-        })}
-      </Text>
-    </View>
-  );
-  
+  //   try {
+  //     console.log('Encrypting image message...');
+  //     const { encryptedMessage, newDhPublicKey } = await sendMessage(
+  //       userPrivateKey,
+  //       friendPublicKey,
+  //       null,
+  //       { image: base64Image }  // Wrap image in an object to differentiate from text
+  //     );
 
+  //     const messageForServer = {
+  //       _id: Date.now().toString(), // Unique ID for message
+  //       roomId: roomId,
+  //       sender: userId,
+  //       encryptedText: encryptedMessage,
+  //       timestamp: new Date().toISOString(),
+  //       senderPublicKey: newDhPublicKey,
+  //       type: 'image'  // Specify that this is an image message
+  //     };
+
+  //     console.log('Sending encrypted image message to server:', messageForServer);
+  //     socket.emit('sendMessage', { roomId, message: messageForServer });
+
+  //     // Save to Realm for immediate display (unencrypted locally)
+  //     const messageForLocal = {
+  //       _id: messageForServer._id,
+  //       roomId: roomId,
+  //       senderId: username,
+  //       text: base64Image,  // Save base64 image directly for display
+  //       timestamp: messageForServer.timestamp,
+  //       isSender: true,
+  //       type: 'image'
+  //     };
+
+  //     await saveMessageToRealm(messageForLocal);
+  //     setMessages((prevMessages) => [...prevMessages, messageForLocal]);
+
+  //   } catch (error) {
+  //     console.error('Error sending image:', error);
+  //   }
+  // };
+  const handleSendImage = async (base64Image) => {
+    if (!roomId || !userPrivateKey || !friendPublicKey) {
+      console.warn('Room ID, private key, or friend public key is missing');
+      return;
+    }
+    try {
+      console.log('Encrypting message:', inputMessage);
+      const { encryptedMessage, newDhPublicKey } = await sendMessage(
+        userPrivateKey,
+        friendPublicKey,
+        null,
+        base64Image
+      );
+      // Directly send image without encryption
+      const messageForServer = {
+        _id: Date.now().toString(), // Unique ID for message
+        roomId: roomId,
+        sender: userId,
+        encryptedText: encryptedMessage,  // Use base64 image directly without encryption
+        timestamp: new Date().toISOString(),
+        senderPublicKey: newDhPublicKey,  // No public key needed for image
+        type: 'image'  // Specify that this is an image message
+      };
+  
+      console.log('Sending unencrypted image message to server:', messageForServer);
+      socket.emit('sendMessage', { roomId, message: messageForServer });
+  
+      // Save to Realm for immediate display (unencrypted locally)
+      const messageForLocal = {
+        _id: messageForServer._id,
+        roomId: roomId,
+        senderId: username,
+        text: base64Image,  // Save base64 image directly for display
+        timestamp: messageForServer.timestamp,
+        isSender: true,
+        type: 'image'
+      };
+  
+      await saveMessageToRealm(messageForLocal);
+      setMessages((prevMessages) => [...prevMessages, messageForLocal]);
+  
+    } catch (error) {
+      console.error('Error sending image:', error);
+    }
+  };
+  
+  const handleSendFile = async (base64File, fileName, fileType) => {
+    if (!roomId || !userPrivateKey || !friendPublicKey) {
+      console.warn('Room ID, private key, or friend public key is missing');
+      return;
+    }
+  
+    try {
+      console.log('Encrypting file message...');
+      // Create a structured file data object
+      const fileData = {
+        file: base64File,
+        fileName: fileName,
+        fileType: fileType
+      };
+  
+      // Convert the file data object to a string for encryption
+      const fileDataString = JSON.stringify(fileData);
+  
+      const { encryptedMessage, newDhPublicKey } = await sendMessage(
+        userPrivateKey,
+        friendPublicKey,
+        null,
+        fileDataString  // Send the stringified file data
+      );
+  
+      // Create message for server
+      const messageForServer = {
+        _id: Date.now().toString(),
+        roomId: roomId,
+        sender: userId,
+        encryptedText: encryptedMessage,
+        timestamp: new Date().toISOString(),
+        senderPublicKey: newDhPublicKey,
+        type: 'file',
+        fileName: fileName,
+        fileType: fileType
+      };
+  
+      console.log('Sending encrypted file message to server:', {
+        ...messageForServer,
+        encryptedText: '[ENCRYPTED]' // Log without the actual encrypted content
+      });
+  
+      // Emit the message to the server
+      socket.emit('sendMessage', { 
+        roomId, 
+        message: messageForServer 
+      });
+  
+      // Create message for local storage and display
+      const messageForLocal = {
+        _id: messageForServer._id,
+        roomId: roomId,
+        senderId: username,
+        text: base64File,
+        timestamp: messageForServer.timestamp,
+        isSender: true,
+        type: 'file',
+        fileName: fileName,
+        fileType: fileType
+      };
+  
+      // Save to local storage
+      await saveMessageToRealm(messageForLocal);
+  
+      // Update UI
+      setMessages(prevMessages => [...prevMessages, messageForLocal]);
+  
+      console.log('File message processed successfully');
+  
+    } catch (error) {
+      console.error('Error sending file:', error);
+      // You might want to show an error message to the user
+      Alert.alert(
+        'Error',
+        'Failed to send file. Please try again.',
+        [{ text: 'OK' }]
+      );
+    }
+  };
+  
+  const renderMessage = ({ item }) => {
+    return (
+      <View style={[
+        styles.messageItem,
+        item.isSender ? styles.myMessage : styles.receivedMessage
+      ]}>
+        {item.type === 'image' ? (
+          <Image
+            source={{ uri: `data:image/jpeg;base64,${item.text}` }}
+            style={styles.messageImage}
+          />
+        ) : item.type === 'file' ? (
+          <View style={styles.fileMessage}>
+            <View style={styles.fileInfo}>
+              <MaterialIcons name="attach-file" size={24} color="#616BFC" />
+              <View style={styles.fileDetails}>
+                <Text style={styles.fileName}>{item.fileName}</Text>
+                <Text style={styles.fileType}>{item.fileType}</Text>
+              </View>
+            </View>
+          </View>
+        ) : (
+          <Text style={styles.messageText}>{item.text}</Text>
+        )}
+        <Text style={styles.messageTime}>
+          {new Date(item.timestamp).toLocaleTimeString([], { 
+            hour: '2-digit', 
+            minute: '2-digit' 
+          })}
+        </Text>
+      </View>
+    );
+  };
+  
+  
+  
   const handleScroll = (event) => {
     const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
     const isAtBottom = 
@@ -436,36 +679,87 @@ const ChatScreen = () => {
 
   const insets = useSafeAreaInsets();
 
-  // Function to handle file selection
+  // Function to handle file selection and sending
   const handleFileSelect = async () => {
     try {
       const result = await DocumentPicker.pick({
-        type: [DocumentPicker.types.allFiles],
+        type: [DocumentPicker.types.allFiles], // Allow all file types
       });
-      console.log('Selected file: ', result);
-      // You can now send this file in your message
+      const fileUri = result[0].uri;
+      console.log('Selected file URI:', fileUri);  // Debug log the URI
+      const fileName = result[0].name;
+      const fileType = result[0].type; // e.g., 'application/pdf'
+
+      console.log('Selected file:', fileName, fileType);
+
+      // Convert file to Base64
+      const base64File = await convertToBase64(fileUri);
+
+      // Send the file
+      handleSendFile(base64File, fileName, fileType);
     } catch (err) {
       if (DocumentPicker.isCancel(err)) {
         console.log('User canceled file picker');
       } else {
         console.error('File picking error:', err);
       }
+
     }
   };
 
+
   // Function to handle image selection
   const handleImageSelect = async () => {
-    launchImageLibrary({ mediaType: 'photo' }, (response) => {
+    launchImageLibrary({ mediaType: 'photo' }, async (response) => {
       if (response.didCancel) {
         console.log('User cancelled image picker');
       } else if (response.errorMessage) {
         console.error('Image picker error:', response.errorMessage);
       } else {
-        console.log('Selected image: ', response.assets);
-        // You can now send this image in your message
+        const selectedImage = response.assets[0];
+
+          // Compress or resize image before conversion to base64
+        const resizedImage = await ImageResizer.createResizedImage(
+          selectedImage.uri,
+          800,    // New width (reduce the size)
+          800,    // New height
+          'JPEG', // Format
+          80      // Quality (0 to 100)
+        );
+
+        const base64Image = await convertToBase64(resizedImage.uri); // Convert resized image to base64
+        handleSendImage(base64Image); // Encrypt and send the resized base64 image
       }
     });
   };
+
+  const convertToBase64 = async (uri) => {
+    try {
+      const base64 = await RNFS.readFile(uri, 'base64');
+      return base64;
+    } catch (error) {
+      console.error('Error converting file to base64:', error);
+    }
+  };
+
+
+  // // Convert image to base64
+  // const convertToBase64 = async (uri) => {
+  //   try {
+  //     const response = await fetch(uri);
+  //     const blob = await response.blob();
+  //     const base64media = await new Promise((resolve) => {
+  //       const reader = new FileReader();
+  //       reader.onloadend = () => resolve(reader.result.split(',')[1]);
+  //       reader.readAsDataURL(blob);
+  //     });
+  //     return base64media;
+  //   } catch (error) {
+  //     console.error('Error converting to base64:', error);  // Log errors in conversion
+  //   }
+  // };
+
+  
 
   // Function to handle video selection
   const handleVideoSelect = async () => {
@@ -786,6 +1080,34 @@ const styles = StyleSheet.create({
     color: '#666',
     alignSelf: 'flex-end',
     marginTop: 5,
+  },
+  // New styles for image messages
+  messageImage: {
+    width: 200,        // Adjust width to your needs
+    height: 200,       // Adjust height to your needs
+    borderRadius: 15,  // Keep it consistent with the rounded corners
+    marginTop: 5,      // Add margin to separate image from other message content
+    resizeMode: 'cover',  // Ensures the image covers the given area
+  },
+  fileMessage: {
+    padding: 10,
+  },
+  fileInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  fileDetails: {
+    marginLeft: 10,
+  },
+  fileName: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#000',
+  },
+  fileType: {
+    fontSize: 12,
+    color: '#666',
+    marginTop: 2,
   },
   inputContainer: {
     flexDirection: 'row',
