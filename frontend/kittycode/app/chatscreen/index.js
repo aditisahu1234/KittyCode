@@ -11,7 +11,9 @@ import {
   Platform, 
   Keyboard,
   PermissionsAndroid,
-  Animated
+  Animated,
+  Alert, 
+  Linking
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';import { useLocalSearchParams } from 'expo-router';
 import { AntDesign, MaterialIcons } from '@expo/vector-icons';
@@ -29,6 +31,8 @@ import * as Keychain from 'react-native-keychain';  // Add this
 import { useRouter } from 'expo-router';
 import ImageResizer from 'react-native-image-resizer';
 import RNFS from 'react-native-fs';
+import FileViewer from 'react-native-file-viewer';
+import mime from 'mime'; 
 import Realm from 'realm';
 
 // Define schema for chat messages
@@ -115,9 +119,6 @@ const getMessagesFromRealm = async (roomId) => {
     realm.close(); // Ensure the realm is closed after retrieving messages
   }
 };
-
-
-
 
 // Clear all messages from Realm (if needed)
 const clearMessagesFromRealm = async (roomId) => {
@@ -325,17 +326,7 @@ const ChatScreen = () => {
         );
 
         console.log('Decrypted message:', decryptedMessage);
-        
-        // // Prepare the message for local storage (with roomId and username instead of userId)
-        // const messageForLocal = {
-        //   _id: message._id,
-        //   roomId: roomId,         // Room ID from the chat
-        //   senderId: message.sender,     // Sender ID, received from server
-        //   text: decryptedMessage.image || decryptedMessage,  // Handle text or image
-        //   timestamp: message.timestamp,
-        //   isSender: false,                // Indicates this message was received (not sent by the user)
-        //   type: message.type || 'text'
-        // };
+
 
         let finalMessage;
         if (message.type === 'file') {
@@ -378,9 +369,6 @@ const ChatScreen = () => {
         }
 
         await markMessageAsSent(roomId, message._id, userId);  // Call function to mark message as sent
-  
-        // Update the UI state with the newly received message
-        // setMessages((prevMessages) => [...prevMessages, messageForLocal]);
   
         
       } catch (error) {
@@ -629,36 +617,54 @@ const ChatScreen = () => {
   };
   
   const renderMessage = ({ item }) => {
+    const handleFilePress = async () => {
+      if (item.type === 'file') {
+        try {
+          // First, we need to save the base64 file to a temporary location
+          const filePath = `${RNFS.CachesDirectoryPath}/${item.fileName}`;
+          await RNFS.writeFile(filePath, item.text, 'base64');
+  
+          // Now we can open the file
+          await FileViewer.open(filePath, { showOpenWithDialog: true });
+        } catch (error) {
+          console.error('Error opening file:', error);
+          Alert.alert('Error', 'Could not open the file.');
+        }
+      }
+    };
+  
     return (
-      <View style={[
-        styles.messageItem,
-        item.isSender ? styles.myMessage : styles.receivedMessage
-      ]}>
-        {item.type === 'image' ? (
-          <Image
-            source={{ uri: `data:image/jpeg;base64,${item.text}` }}
-            style={styles.messageImage}
-          />
-        ) : item.type === 'file' ? (
-          <View style={styles.fileMessage}>
-            <View style={styles.fileInfo}>
-              <MaterialIcons name="attach-file" size={24} color="#616BFC" />
-              <View style={styles.fileDetails}>
-                <Text style={styles.fileName}>{item.fileName}</Text>
-                <Text style={styles.fileType}>{item.fileType}</Text>
+      <TouchableOpacity onPress={handleFilePress}>
+        <View style={[
+          styles.messageItem,
+          item.isSender ? styles.myMessage : styles.receivedMessage
+        ]}>
+          {item.type === 'image' ? (
+            <Image
+              source={{ uri: `data:image/jpeg;base64,${item.text}` }}
+              style={styles.messageImage}
+            />
+          ) : item.type === 'file' ? (
+            <View style={styles.fileMessage}>
+              <View style={styles.fileInfo}>
+                <MaterialIcons name="attach-file" size={24} color="#616BFC" />
+                <View style={styles.fileDetails}>
+                  <Text style={styles.fileName}>{item.fileName}</Text>
+                  <Text style={styles.fileType}>{item.fileType}</Text>
+                </View>
               </View>
             </View>
-          </View>
-        ) : (
-          <Text style={styles.messageText}>{item.text}</Text>
-        )}
-        <Text style={styles.messageTime}>
-          {new Date(item.timestamp).toLocaleTimeString([], { 
-            hour: '2-digit', 
-            minute: '2-digit' 
-          })}
-        </Text>
-      </View>
+          ) : (
+            <Text style={styles.messageText}>{item.text}</Text>
+          )}
+          <Text style={styles.messageTime}>
+            {new Date(item.timestamp).toLocaleTimeString([], { 
+              hour: '2-digit', 
+              minute: '2-digit' 
+            })}
+          </Text>
+        </View>
+      </TouchableOpacity>
     );
   };
   
@@ -740,25 +746,6 @@ const ChatScreen = () => {
       console.error('Error converting file to base64:', error);
     }
   };
-
-
-  // // Convert image to base64
-  // const convertToBase64 = async (uri) => {
-  //   try {
-  //     const response = await fetch(uri);
-  //     const blob = await response.blob();
-  //     const base64media = await new Promise((resolve) => {
-  //       const reader = new FileReader();
-  //       reader.onloadend = () => resolve(reader.result.split(',')[1]);
-  //       reader.readAsDataURL(blob);
-  //     });
-  //     return base64media;
-  //   } catch (error) {
-  //     console.error('Error converting to base64:', error);  // Log errors in conversion
-  //   }
-  // };
-
-  
 
   // Function to handle video selection
   const handleVideoSelect = async () => {
