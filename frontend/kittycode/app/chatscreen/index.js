@@ -376,7 +376,7 @@ const ChatScreen = () => {
         if (isAtBottom) {
           flatListRef.current?.scrollToEnd({ animated: true });
         }
-        
+
         await markMessageAsSent(roomId, message._id, userId);  // Call function to mark message as sent
   
         // Update the UI state with the newly received message
@@ -555,25 +555,26 @@ const ChatScreen = () => {
     }
   
     try {
+      console.log('File size (bytes):', base64File.length);
       console.log('Encrypting file message...');
-      // Create a structured file data object
       const fileData = {
         file: base64File,
         fileName: fileName,
         fileType: fileType
       };
-  
-      // Convert the file data object to a string for encryption
+
       const fileDataString = JSON.stringify(fileData);
-  
+      console.log('File data string size (bytes):', fileDataString.length);
+
       const { encryptedMessage, newDhPublicKey } = await sendMessage(
         userPrivateKey,
         friendPublicKey,
         null,
-        fileDataString  // Send the stringified file data
+        fileDataString
       );
-  
-      // Create message for server
+
+      console.log('Encrypted message size (bytes):', encryptedMessage.length);
+
       const messageForServer = {
         _id: Date.now().toString(),
         roomId: roomId,
@@ -585,18 +586,16 @@ const ChatScreen = () => {
         fileName: fileName,
         fileType: fileType
       };
-  
-      console.log('Sending encrypted file message to server:', {
-        ...messageForServer,
-        encryptedText: '[ENCRYPTED]' // Log without the actual encrypted content
+
+      console.log('Sending encrypted file message to server...');
+      socket.emit('sendMessage', { roomId, message: messageForServer }, (ack) => {
+        if (ack && ack.error) {
+          console.error('Error from server:', ack.error);
+        } else {
+          console.log('File message sent successfully');
+        }
       });
-  
-      // Emit the message to the server
-      socket.emit('sendMessage', { 
-        roomId, 
-        message: messageForServer 
-      });
-  
+    
       // Create message for local storage and display
       const messageForLocal = {
         _id: messageForServer._id,

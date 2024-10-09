@@ -18,6 +18,7 @@ const io = new Server(server, {
   cors: {
     origin: '*', // Adjust based on your front-end domain
   },
+  maxHttpBufferSize: 1e8 // 100 MB (adjust as needed)
 });
 
 app.use(bodyParser.json());
