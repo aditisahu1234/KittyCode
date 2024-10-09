@@ -126,7 +126,10 @@ exports.getChatMessages = async (req, res) => {
       encryptedText: message.encryptedText,
       timestamp: message.timestamp,
       senderPublicKey: message.senderPublicKey,
-      status: message.status
+      status: message.status,
+      type: message.type,
+      fileName: message.fileName || null,  // Include file name for file messages
+      fileType: message.fileType || null,  // Include file type for file messages
     }));
 
     res.status(200).json(formattedMessages);
@@ -164,6 +167,9 @@ exports.handleSendMessage = async (roomId, message) => {
       timestamp: new Date(),
       senderPublicKey: message.senderPublicKey,
       status: 'pending',  // Initially set the status as 'pending'
+      type: message.type || 'text',  // Handle 'text' or 'image'
+      fileName: message.fileName || null,  // New: File name if it's a file
+      fileType: message.fileType || null,  // New: File type (MIME type)
     };
 
     if (!newMessage.encryptedText || !newMessage.senderPublicKey) {
@@ -191,7 +197,10 @@ exports.handleSendMessage = async (roomId, message) => {
       encryptedText: savedMessage.encryptedText,
       timestamp: savedMessage.timestamp,
       senderPublicKey: savedMessage.senderPublicKey,
-      status: savedMessage.status  // 'pending' status
+      status: savedMessage.status,  // 'pending' status
+      type: savedMessage.type,  // Include message type
+      fileName: savedMessage.fileName || null,  // Include file name if applicable
+      fileType: savedMessage.fileType || null,  // Include file type if applicable
     };
   } catch (error) {
     console.error('Error handling send message:', error.message);
