@@ -43,6 +43,7 @@ const saveMessageToRealm = async (message) => {
     realm.write(() => {
       realm.create('Message', {
         _id: message._id,              // Ensure unique message ID
+        userId: userId,                // Associate message with the current user
         roomId: message.roomId,         // Room ID of the chat
         senderId: message.senderId,     // Username instead of userId
         text: message.text || null,     // Decrypted message text or null for files
@@ -72,6 +73,7 @@ const getMessagesFromRealm = async (roomId) => {
 
     const result = messages.map((msg) => ({
       _id: msg._id,
+      userId: userId,                // Associate message with the current user
       roomId: msg.roomId,
       senderId: msg.senderId,        // This will be `username` now
       text: msg.text || null,        // Handle text or null for file messages
@@ -264,6 +266,7 @@ const ChatScreen = () => {
             // Save the decrypted message to Realm with `username`
             await saveMessageToRealm({
               ...messageForLocal,
+              userId: userId,              // Add userId when saving
               roomId: roomId,
               timestamp: message.timestamp,
             });
@@ -399,6 +402,7 @@ const ChatScreen = () => {
 
         const messageForLocal = {
           _id: messageForServer._id,
+          userId: userId,             // Include userId here
           roomId: roomId,
           senderId: username,
           text: inputMessage,
@@ -453,6 +457,7 @@ const ChatScreen = () => {
         // Save to Realm for immediate display (unencrypted locally)
         const messageForLocal = {
           _id: messageForServer._id,
+          userId: userId,             // Include userId here
           roomId: roomId,
           senderId: username,
           text: base64Image,  // Save base64 image directly for display
@@ -521,6 +526,7 @@ const ChatScreen = () => {
         // Save to Realm for immediate display
         const messageForLocal = {
           _id: messageForServer._id,
+          userId: userId,             // Include userId here
           roomId: roomId,
           senderId: username,
           text: base64File,

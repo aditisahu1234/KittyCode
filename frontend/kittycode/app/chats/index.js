@@ -10,35 +10,44 @@ const MessagesScreen = ({ userId, username }) => {
 
   // Fetch messages from the backend
   useEffect(() => {
-    const fetchChats = async () => {
+    const fetchChatsFromRealm = async () => {
       try {
-        const response = await fetch(`https://0e3c-152-58-144-57.ngrok-free.app/api/chats/user`, {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${userId}`,
-          },
+        const realm = await openRealm();
+  
+        // Fetch all friends
+        const friends = realm.objects('Friend').filtered('userId == $0', userId);
+  
+        // Fetch the latest message for each friend based on roomId
+        const chatData = friends.map((friend) => {
+          const latestMessage = realm
+            .objects('Message')
+            .filtered('roomId == $0', friend.roomId)
+            .sorted('timestamp', true)[0];  // Get the latest message by sorting by timestamp
+  
+          return {
+            friendId: friend._id,
+            friendName: friend.name,
+            avatar: friend.avatar || 'https://via.placeholder.com/50', // Replace with actual avatar field if available
+            lastMessage: latestMessage ? {
+              encryptedText: latestMessage.text,
+              timestamp: latestMessage.timestamp,
+            } : null,
+            unread: false, // You might need to add logic for unread status
+          };
         });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('Error fetching chat data:', errorText);
-          Alert.alert('Error', 'Failed to fetch chats.');
-          setLoading(false);
-          return;
-        }
-
-        const data = await response.json();
-        setMessagesData(data);
+  
+        setMessagesData(chatData);
       } catch (error) {
-        console.log('Error fetching chat data:', error.message);
-        Alert.alert('Error', 'Failed to fetch chat data.');
+        console.error('Error fetching chat data from Realm:', error);
+        Alert.alert('Error', 'Failed to fetch chats.');
       } finally {
         setLoading(false);
       }
     };
-
-    fetchChats();
+  
+    fetchChatsFromRealm(); // Call the new function
   }, [userId]);
+  
 
   // Format timestamp for display
   const formatTimestamp = (timestamp) => {

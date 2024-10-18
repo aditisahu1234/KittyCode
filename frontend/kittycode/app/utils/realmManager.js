@@ -6,6 +6,7 @@ const FriendSchema = {
   properties: {
     _id: 'string',
     name: 'string',
+    userId: 'string',  // Add this line
     status: 'string',
     roomId: 'string?', // Add roomId as an optional string
   },
@@ -16,6 +17,7 @@ const MessageSchema = {
   name: 'Message',
   properties: {
     _id: 'string',
+    userId: 'string',  // Add this line
     roomId: 'string',
     senderId: 'string',
     text: 'string?',

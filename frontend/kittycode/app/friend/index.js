@@ -16,11 +16,11 @@ const Friends = ({ userId, username }) => {
 
   useEffect(() => {
     loadFriendsFromRealm();  // Load friends from Realm on mount
-  }, []);
+  }, [userId]);
 
   const loadFriendsFromRealm = async() => {
     const realm = await openRealm();
-    const savedFriends = realm.objects('Friend');
+    const savedFriends = realm.objects('Friend').filtered('userId == $0', userId);
     console.log(savedFriends);
     setFriends(Array.from(savedFriends)); // Load friends from Realm
   };
@@ -62,6 +62,7 @@ const Friends = ({ userId, username }) => {
           // If the friend doesn't exist in Realm, add it
           realm.create('Friend', {
             _id: fetchedFriend._id,
+            userId: userId, // Add this line to associate the friend with the current user
             name: fetchedFriend.name,
             status: 'Online',  // Default to 'Online', you can update with real status
             roomId: fetchedFriend.roomId || null, // Add roomId if available
