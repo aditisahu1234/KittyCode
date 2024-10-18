@@ -4,7 +4,7 @@ import { useFonts } from 'expo-font';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 
-const BASE_URL = "https://47cc-2401-4900-1c01-de12-10b7-f80a-e848-e9d.ngrok-free.app";
+const BASE_URL = "https://0e3c-152-58-144-57.ngrok-free.app";
 
 export default function CreateAccountScreen() {
   const [name, setName] = useState('');

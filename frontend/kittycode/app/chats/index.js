@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, TouchableOpacity, Image, StyleSheet, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
+import { openRealm } from '../utils/realmManager';
 
 const MessagesScreen = ({ userId, username }) => {
   const router = useRouter();
@@ -11,7 +12,7 @@ const MessagesScreen = ({ userId, username }) => {
   useEffect(() => {
     const fetchChats = async () => {
       try {
-        const response = await fetch(`https://47cc-2401-4900-1c01-de12-10b7-f80a-e848-e9d.ngrok-free.app/api/chats/user`, {
+        const response = await fetch(`https://0e3c-152-58-144-57.ngrok-free.app/api/chats/user`, {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${userId}`,

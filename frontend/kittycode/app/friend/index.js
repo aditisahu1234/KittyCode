@@ -1,19 +1,29 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, FlatList, StyleSheet, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
+import { View, Text, FlatList, StyleSheet, TouchableOpacity, Modal, TextInput, Alert, Button } from 'react-native';
 import { AntDesign } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
+import { openRealm } from '../utils/realmManager';
 
 const BASE_URL = "http://3.26.156.142:3000";
+
 
 const Friends = ({ userId, username }) => {
   const [isModalVisible, setIsModalVisible] = useState(false);
   const [friendUsername, setFriendUsername] = useState('');
   const [friends, setFriends] = useState([]);
+  const [isRefreshing, setIsRefreshing] = useState(false); // For refresh
   const router = useRouter();
 
   useEffect(() => {
-    fetchFriends();
+    loadFriendsFromRealm();  // Load friends from Realm on mount
   }, []);
+
+  const loadFriendsFromRealm = async() => {
+    const realm = await openRealm();
+    const savedFriends = realm.objects('Friend');
+    console.log(savedFriends);
+    setFriends(Array.from(savedFriends)); // Load friends from Realm
+  };
 
   const fetchFriends = async () => {
     try {
@@ -31,10 +41,50 @@ const Friends = ({ userId, username }) => {
       }
 
       const data = await response.json();
-      setFriends(data.friends || []);
+      const fetchedFriends = data.friends || [];
+
+      console.log("Fetched Friends:", fetchedFriends);
+
+      updateRealmWithNewFriends(fetchedFriends); // Update Realm with new friends
+
     } catch (error) {
       console.error('Error fetching friends:', error.message);
     }
+  };
+
+  const updateRealmWithNewFriends = async (fetchedFriends) => {
+    const realm = await openRealm();
+    realm.write(() => {
+      // Compare and update Realm data
+      fetchedFriends.forEach((fetchedFriend) => {
+        const existingFriend = realm.objectForPrimaryKey('Friend', fetchedFriend._id);
+        if (!existingFriend) {
+          // If the friend doesn't exist in Realm, add it
+          realm.create('Friend', {
+            _id: fetchedFriend._id,
+            name: fetchedFriend.name,
+            status: 'Online',  // Default to 'Online', you can update with real status
+            roomId: fetchedFriend.roomId || null, // Add roomId if available
+          });
+        } else if (existingFriend.name !== fetchedFriend.name || existingFriend.roomId !== fetchedFriend.roomId) {
+          existingFriend.name = fetchedFriend.name;
+          if (fetchedFriend.roomId) {
+            existingFriend.roomId = fetchedFriend.roomId;
+          }
+        }
+      });
+
+      // Remove friends from Realm if they are not in the fetched list
+      const savedFriends = realm.objects('Friend');
+      savedFriends.forEach((savedFriend) => {
+        if (!fetchedFriends.find(friend => friend._id === savedFriend._id)) {
+          realm.delete(savedFriend);
+        }
+      });
+    });
+
+    // Update the friends state from the updated Realm data
+    loadFriendsFromRealm();
   };
 
   const handleAddFriend = async () => {
@@ -60,20 +110,41 @@ const Friends = ({ userId, username }) => {
     }
   };
 
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await fetchFriends();  // Fetch the updated friend list and update Realm
+    setIsRefreshing(false);
+  };
+
+  // Sequential rendering with setTimeout for each friend
+  const renderFriendsOneByOne = () => {
+    let index = 0;
+    const renderNext = () => {
+      if (index < friends.length) {
+        setTimeout(() => {
+          setFriends(prev => [...prev, friends[index]]);
+          index++;
+          renderNext();
+        }, 50);  // Render each friend after 50ms
+      }
+    };
+    renderNext();
+  };
+
   const renderFriendItem = ({ item }) => (
     <TouchableOpacity 
       style={styles.friendItem}
       onPress={() => {
         router.push({
           pathname: '../chatscreen',
-          params: { userId, username, friendId: item._id, friendName: item.name },
+          params: { userId, username, friendId: item._id, friendName: item.name , roomId: item.roomId },
         });
       }}
     >
       <View style={styles.profilePic}></View>
       <View style={styles.friendDetails}>
         <Text style={styles.friendName}>{item.name}</Text>
-        <Text style={styles.friendStatus}>Online</Text>
+        <Text style={styles.friendStatus}>{item.status}</Text>
       </View>
     </TouchableOpacity>
   );
@@ -93,6 +164,14 @@ const Friends = ({ userId, username }) => {
       <TouchableOpacity style={styles.addButton} onPress={() => setIsModalVisible(true)}>
         <AntDesign name="plus" size={24} color="#fff" />
       </TouchableOpacity>
+      <TouchableOpacity 
+        style={styles.refreshButton} 
+        onPress={handleRefresh} 
+        disabled={isRefreshing}
+      >
+        <AntDesign name="reload1" size={24} color="#fff" />
+      </TouchableOpacity>
+
       <Modal
         transparent={true}
         visible={isModalVisible}
@@ -105,8 +184,8 @@ const Friends = ({ userId, username }) => {
             <TextInput
               style={styles.modalInput}
               placeholder="Enter username"
-              value={friendUsername}  // Use friendUsername as the input value
-              onChangeText={setFriendUsername}  // Use setFriendUsername to update the input
+              value={friendUsername}
+              onChangeText={setFriendUsername}
             />
             <TouchableOpacity style={styles.modalButton} onPress={handleAddFriend}>
               <Text style={styles.modalButtonText}>Send Invite</Text>
@@ -239,6 +318,17 @@ const styles = StyleSheet.create({
     color: '#fff',
     textAlign: 'center',
   },
+  refreshButton: {
+  position: 'absolute',
+  bottom: 100,  // Positioned above the add friend button
+  right: 30,
+  backgroundColor: '#4CAF50',
+  borderRadius: 50,
+  padding: 15,
+  justifyContent: 'center',
+  alignItems: 'center',
+  },
+
 });
 
 export default Friends;
