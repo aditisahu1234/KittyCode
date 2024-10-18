@@ -13,8 +13,7 @@ import {
   PermissionsAndroid,
   Animated,
   Alert, 
-  Linking,
-  InteractionManager
+  Linking
 } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';import { useLocalSearchParams } from 'expo-router';
 import { AntDesign, MaterialIcons } from '@expo/vector-icons';
@@ -29,11 +28,38 @@ import {
 } from '../utils/crypto';
 import { encode as encodeBase64 ,decode as decodeBase64 } from '@stablelib/base64';  // Import decodeBase64 from stablelib
 import * as Keychain from 'react-native-keychain';  // Add this
+import { useRouter } from 'expo-router';
 import ImageResizer from 'react-native-image-resizer';
 import RNFS from 'react-native-fs';
 import FileViewer from 'react-native-file-viewer';
-import { openRealm } from '../utils/realmManager';
+import mime from 'mime'; 
+import Realm from 'realm';
 
+// Define schema for chat messages
+const MessageSchema = {
+  name: 'Message',
+  properties: {
+    _id: 'string',
+    roomId: 'string',
+    senderId: 'string',
+    text: 'string?',   // This will store either text, base64 image, or null for files
+    file: 'string?',    // New field to store base64-encoded file data (nullable)
+    fileName: 'string?', // Store file name if a file is being sent
+    fileType: 'string?', // Store file type (MIME type, e.g., 'application/pdf')
+    timestamp: 'date',
+    isSender: 'bool',
+    type: 'string?',   // Add 'type' to distinguish between 'text', 'image', or 'file'
+  },
+  primaryKey: '_id',
+};
+
+
+
+const openRealm = async () => {
+  return await Realm.open({
+    schema: [MessageSchema],
+  });
+};
 
 const saveMessageToRealm = async (message) => {
   const realm = await openRealm();
@@ -58,6 +84,8 @@ const saveMessageToRealm = async (message) => {
     console.log(`Message saved to Realm: ${message.text || message.fileName}`); // Confirm message was saved
   } catch (error) {
     console.error('Error saving message to Realm:', error); // Log any errors during save
+  } finally {
+    realm.close(); // Ensure the realm is closed after saving
   }
 };
 
@@ -87,7 +115,9 @@ const getMessagesFromRealm = async (roomId) => {
   } catch (error) {
     console.error('Error retrieving messages from Realm:', error); // Log any errors during retrieval
     return [];
-  } 
+  } finally {
+    realm.close(); // Ensure the realm is closed after retrieving messages
+  }
 };
 
 // Clear all messages from Realm (if needed)
@@ -97,6 +127,7 @@ const clearMessagesFromRealm = async (roomId) => {
     const messagesToDelete = realm.objects('Message').filtered('roomId == $0', roomId);
     realm.delete(messagesToDelete);
   });
+  realm.close();
 };
 
 const markMessageAsSent = async (roomId, messageId, userId) => {
@@ -120,7 +151,7 @@ const markMessageAsSent = async (roomId, messageId, userId) => {
 };
 
 
-const BASE_URL = "https://0e3c-152-58-144-57.ngrok-free.app";
+const BASE_URL = "https://47cc-2401-4900-1c01-de12-10b7-f80a-e848-e9d.ngrok-free.app";
 const socket = io(BASE_URL, {
   autoConnect: false,
   reconnectionAttempts: 3,
@@ -186,15 +217,6 @@ const ChatScreen = () => {
   
         const friendPublicKeyUint8Array = decodeBase64(data.friendPublicKey);
         setRoomId(data._id);
-
-        const realm = await openRealm();
-          realm.write(() => {
-            const friend = realm.objectForPrimaryKey('Friend', friendId);
-            if (friend) {
-              friend.roomId = data._id;
-            }
-          });
-          
         setFriendPublicKey(friendPublicKeyUint8Array);
         
         if (!privateKey || !friendPublicKeyUint8Array) {
@@ -359,189 +381,241 @@ const ChatScreen = () => {
   
     // Add roomId as a dependency
   
-
-  // Send Text Message
+  
   const handleSendMessage = async () => {
     if (!inputMessage.trim()) {
       console.warn('Message is missing');
       return;
     }
-
+  
     if (!roomId || !userPrivateKey || !friendPublicKey) {
       console.warn('Room ID, private key, or friend public key is missing');
       return;
     }
-
+  
     try {
       console.log('Encrypting message:', inputMessage);
-
-      // Perform encryption in the background
-      InteractionManager.runAfterInteractions(async () => {
-        const { encryptedMessage, newDhPublicKey } = await sendMessage(
-          userPrivateKey,
-          friendPublicKey,
-          null,
-          inputMessage
-        );
-
-        const messageForServer = {
-          _id: Date.now().toString(), // Unique ID for message
-          roomId: roomId,
-          sender: userId,
-          encryptedText: encryptedMessage,
-          timestamp: new Date().toISOString(),
-          senderPublicKey: newDhPublicKey,
-          type: 'text'
-        };
-
-        console.log('Sending encrypted message to server:', messageForServer);
-        socket.emit('sendMessage', { roomId, message: messageForServer });
-
-        const messageForLocal = {
-          _id: messageForServer._id,
-          roomId: roomId,
-          senderId: username,
-          text: inputMessage,
-          timestamp: messageForServer.timestamp,
-          isSender: true,
-          type: 'text'
-        };
-
-        await saveMessageToRealm(messageForLocal);
-        setMessages((prevMessages) => [...prevMessages, messageForLocal]);
-        setInputMessage('');
-      });
-
+      const { encryptedMessage, newDhPublicKey } = await sendMessage(
+        userPrivateKey,
+        friendPublicKey,
+        null,
+        inputMessage
+      );
+  
+      // Message to send to the server (with userId)
+      const messageForServer = {
+        _id: Date.now().toString(), // Generate a unique message ID
+        roomId: roomId,
+        sender: userId,             // Use the userId for server communication
+        encryptedText: encryptedMessage,
+        timestamp: new Date().toISOString(),
+        senderPublicKey: newDhPublicKey,
+        type: 'text'
+      };
+  
+      console.log('Sending encrypted message to server:', messageForServer);
+      socket.emit('sendMessage', { roomId, message: messageForServer });
+  
+      // Message to save locally (with username)
+      const messageForLocal = {
+        _id: messageForServer._id,  // Same message ID
+        roomId: roomId,
+        senderId: username,         // Use the username for local storage in Realm
+        text: inputMessage,         // Save the plain text in local storage
+        timestamp: messageForServer.timestamp,
+        isSender: true,
+        type: 'text'             // Indicates this message was sent by the user
+      };
+  
+      // Save the decrypted message to Realm (with username)
+      await saveMessageToRealm(messageForLocal);  // Store using `username` for local DB
+  
+      // Add message to local state for immediate display
+      setMessages((prevMessages) => [
+        ...prevMessages,
+        messageForLocal,  // Add locally saved message (with username)
+      ]);
+  
+      setInputMessage('');
     } catch (error) {
       console.error('Error sending message:', error);
       Alert.alert('Error', 'Failed to send message. Please try again.');
     }
   };
+  
+  // Send Image (with Encryption) to Server
+  // const handleSendImage = async (base64Image) => {
+  //   if (!roomId || !userPrivateKey || !friendPublicKey) {
+  //     console.warn('Room ID, private key, or friend public key is missing');
+  //     return;
+  //   }
 
+  //   try {
+  //     console.log('Encrypting image message...');
+  //     const { encryptedMessage, newDhPublicKey } = await sendMessage(
+  //       userPrivateKey,
+  //       friendPublicKey,
+  //       null,
+  //       { image: base64Image }  // Wrap image in an object to differentiate from text
+  //     );
+
+  //     const messageForServer = {
+  //       _id: Date.now().toString(), // Unique ID for message
+  //       roomId: roomId,
+  //       sender: userId,
+  //       encryptedText: encryptedMessage,
+  //       timestamp: new Date().toISOString(),
+  //       senderPublicKey: newDhPublicKey,
+  //       type: 'image'  // Specify that this is an image message
+  //     };
+
+  //     console.log('Sending encrypted image message to server:', messageForServer);
+  //     socket.emit('sendMessage', { roomId, message: messageForServer });
+
+  //     // Save to Realm for immediate display (unencrypted locally)
+  //     const messageForLocal = {
+  //       _id: messageForServer._id,
+  //       roomId: roomId,
+  //       senderId: username,
+  //       text: base64Image,  // Save base64 image directly for display
+  //       timestamp: messageForServer.timestamp,
+  //       isSender: true,
+  //       type: 'image'
+  //     };
+
+  //     await saveMessageToRealm(messageForLocal);
+  //     setMessages((prevMessages) => [...prevMessages, messageForLocal]);
+
+  //   } catch (error) {
+  //     console.error('Error sending image:', error);
+  //   }
+  // };
   const handleSendImage = async (base64Image) => {
     if (!roomId || !userPrivateKey || !friendPublicKey) {
       console.warn('Room ID, private key, or friend public key is missing');
       return;
     }
-
     try {
-      // Perform the heavy encryption process in the background
-      InteractionManager.runAfterInteractions(async () => {
-        console.log('Encrypting message:', base64Image);
-
-        // Asynchronously encrypt the image
-        const { encryptedMessage, newDhPublicKey } = await sendMessage(
-          userPrivateKey,
-          friendPublicKey,
-          null,
-          base64Image
-        );
-
-        const messageForServer = {
-          _id: Date.now().toString(), // Unique ID for message
-          roomId: roomId,
-          sender: userId,
-          encryptedText: encryptedMessage,
-          timestamp: new Date().toISOString(),
-          senderPublicKey: newDhPublicKey,
-          type: 'image'
-        };
-
-        console.log('Sending encrypted image message to server:', messageForServer);
-        socket.emit('sendMessage', { roomId, message: messageForServer });
-
-        // Save to Realm for immediate display (unencrypted locally)
-        const messageForLocal = {
-          _id: messageForServer._id,
-          roomId: roomId,
-          senderId: username,
-          text: base64Image,  // Save base64 image directly for display
-          timestamp: messageForServer.timestamp,
-          isSender: true,
-          type: 'image'
-        };
-
-        await saveMessageToRealm(messageForLocal);
-        setMessages((prevMessages) => [...prevMessages, messageForLocal]);
-      });
-
+      console.log('Encrypting message:', inputMessage);
+      const { encryptedMessage, newDhPublicKey } = await sendMessage(
+        userPrivateKey,
+        friendPublicKey,
+        null,
+        base64Image
+      );
+      // Directly send image without encryption
+      const messageForServer = {
+        _id: Date.now().toString(), // Unique ID for message
+        roomId: roomId,
+        sender: userId,
+        encryptedText: encryptedMessage,  // Use base64 image directly without encryption
+        timestamp: new Date().toISOString(),
+        senderPublicKey: newDhPublicKey,  // No public key needed for image
+        type: 'image'  // Specify that this is an image message
+      };
+  
+      console.log('Sending unencrypted image message to server:', messageForServer);
+      socket.emit('sendMessage', { roomId, message: messageForServer });
+  
+      // Save to Realm for immediate display (unencrypted locally)
+      const messageForLocal = {
+        _id: messageForServer._id,
+        roomId: roomId,
+        senderId: username,
+        text: base64Image,  // Save base64 image directly for display
+        timestamp: messageForServer.timestamp,
+        isSender: true,
+        type: 'image'
+      };
+  
+      await saveMessageToRealm(messageForLocal);
+      setMessages((prevMessages) => [...prevMessages, messageForLocal]);
+  
     } catch (error) {
       console.error('Error sending image:', error);
     }
   };
-
-
+  
   const handleSendFile = async (base64File, fileName, fileType) => {
     if (!roomId || !userPrivateKey || !friendPublicKey) {
       console.warn('Room ID, private key, or friend public key is missing');
       return;
     }
-
+  
     try {
       console.log('File size (bytes):', base64File.length);
+      console.log('Encrypting file message...');
+      const fileData = {
+        file: base64File,
+        fileName: fileName,
+        fileType: fileType
+      };
 
-      // Offload file processing to background thread
-      InteractionManager.runAfterInteractions(async () => {
-        console.log('Encrypting file message...');
-        const fileData = {
-          file: base64File,
-          fileName: fileName,
-          fileType: fileType
-        };
+      const fileDataString = JSON.stringify(fileData);
+      console.log('File data string size (bytes):', fileDataString.length);
 
-        const fileDataString = JSON.stringify(fileData);
-        const { encryptedMessage, newDhPublicKey } = await sendMessage(
-          userPrivateKey,
-          friendPublicKey,
-          null,
-          fileDataString
-        );
+      const { encryptedMessage, newDhPublicKey } = await sendMessage(
+        userPrivateKey,
+        friendPublicKey,
+        null,
+        fileDataString
+      );
 
-        const messageForServer = {
-          _id: Date.now().toString(),
-          roomId: roomId,
-          sender: userId,
-          encryptedText: encryptedMessage,
-          timestamp: new Date().toISOString(),
-          senderPublicKey: newDhPublicKey,
-          type: 'file',
-          fileName: fileName,
-          fileType: fileType
-        };
+      console.log('Encrypted message size (bytes):', encryptedMessage.length);
 
-        console.log('Sending encrypted file message to server...');
-        socket.emit('sendMessage', { roomId, message: messageForServer }, (ack) => {
-          if (ack && ack.error) {
-            console.error('Error from server:', ack.error);
-          } else {
-            console.log('File message sent successfully');
-          }
-        });
+      const messageForServer = {
+        _id: Date.now().toString(),
+        roomId: roomId,
+        sender: userId,
+        encryptedText: encryptedMessage,
+        timestamp: new Date().toISOString(),
+        senderPublicKey: newDhPublicKey,
+        type: 'file',
+        fileName: fileName,
+        fileType: fileType
+      };
 
-        // Save to Realm for immediate display
-        const messageForLocal = {
-          _id: messageForServer._id,
-          roomId: roomId,
-          senderId: username,
-          text: base64File,
-          timestamp: messageForServer.timestamp,
-          isSender: true,
-          type: 'file',
-          fileName: fileName,
-          fileType: fileType
-        };
-
-        await saveMessageToRealm(messageForLocal);
-        setMessages(prevMessages => [...prevMessages, messageForLocal]);
-        console.log('File message processed successfully');
+      console.log('Sending encrypted file message to server...');
+      socket.emit('sendMessage', { roomId, message: messageForServer }, (ack) => {
+        if (ack && ack.error) {
+          console.error('Error from server:', ack.error);
+        } else {
+          console.log('File message sent successfully');
+        }
       });
-
+    
+      // Create message for local storage and display
+      const messageForLocal = {
+        _id: messageForServer._id,
+        roomId: roomId,
+        senderId: username,
+        text: base64File,
+        timestamp: messageForServer.timestamp,
+        isSender: true,
+        type: 'file',
+        fileName: fileName,
+        fileType: fileType
+      };
+  
+      // Save to local storage
+      await saveMessageToRealm(messageForLocal);
+  
+      // Update UI
+      setMessages(prevMessages => [...prevMessages, messageForLocal]);
+  
+      console.log('File message processed successfully');
+  
     } catch (error) {
       console.error('Error sending file:', error);
-      Alert.alert('Error', 'Failed to send file. Please try again.');
+      // You might want to show an error message to the user
+      Alert.alert(
+        'Error',
+        'Failed to send file. Please try again.',
+        [{ text: 'OK' }]
+      );
     }
   };
-
+  
   const renderMessage = ({ item }) => {
     const handleFilePress = async () => {
       if (item.type === 'file') {

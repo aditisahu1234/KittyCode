@@ -2,7 +2,9 @@ import React from 'react';
 import { StyleSheet, Text, View, TouchableOpacity, Dimensions } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useFonts } from 'expo-font';
+import { useRouter } from 'expo-router';
 import { Link } from 'expo-router';
+import { FontAwesome } from '@expo/vector-icons';
 
 const { width, height } = Dimensions.get('window');
 
@@ -12,12 +14,17 @@ export default function App() {
         'Poppins-SemiBold': require('../../assets/fonts/Poppins-SemiBold.ttf'),
     });
 
+    const router = useRouter();
+
     if (!loaded) {
         return null; // You can add a loader here if fonts are not loaded
     }
 
     return (
         <View style={styles.container}>
+            <TouchableOpacity style={styles.backButton} onPress={() => router.push('/splash')}>
+                <FontAwesome name="arrow-left" size={24} color="#fff" />
+            </TouchableOpacity>
             {/* New to KittyCode section */}
             <View style={styles.section}>
                 <Text style={styles.heading}>New to KittyCode?</Text>
@@ -64,6 +71,11 @@ const styles = StyleSheet.create({
         paddingHorizontal: width * 0.05, // 5% padding for all screen sizes
         justifyContent: 'center', // Center content vertically
         alignItems: 'center', // Center content horizontally
+    },
+    backButton: {
+        position: 'absolute',
+        top: 50,
+        left: 20,
     },
     section: {
         marginBottom: height * 0.05, // Margin responsive to screen height

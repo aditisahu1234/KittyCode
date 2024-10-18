@@ -3,6 +3,7 @@ import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert, ActivityInd
 import { useFonts } from 'expo-font';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import { FontAwesome } from '@expo/vector-icons';
 
 const BASE_URL = "https://0e3c-152-58-144-57.ngrok-free.app";
 
@@ -64,6 +65,9 @@ export default function CreateAccountScreen() {
 
   return (
     <View style={styles.container}>
+      <TouchableOpacity style={styles.backButton} onPress={() => router.push('/account')}>
+        <FontAwesome name="arrow-left" size={24} color="#fff" />
+      </TouchableOpacity>
       <Text style={styles.headerText}>Let's create your account!</Text>
       <Text style={styles.subText}>It will just take 2 minutes! Start chatting with your friends and family!</Text>
 
@@ -117,6 +121,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#616BFC',
     justifyContent: 'center',
     padding: 20,
+  },
+  backButton: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
   },
   headerText: {
     fontFamily: 'Poppins-SemiBold',
