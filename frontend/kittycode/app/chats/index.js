@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, TouchableOpacity, Image, StyleSheet, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
 
-const MessagesScreen = ({ userId }) => {
+const MessagesScreen = ({ userId, username }) => {
   const router = useRouter();
   const [messagesData, setMessagesData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -11,7 +11,7 @@ const MessagesScreen = ({ userId }) => {
   useEffect(() => {
     const fetchChats = async () => {
       try {
-        const response = await fetch(`https://b57d-122-163-78-156.ngrok-free.app/api/chats/user`, {
+        const response = await fetch(`https://47cc-2401-4900-1c01-de12-10b7-f80a-e848-e9d.ngrok-free.app/api/chats/user`, {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${userId}`,
@@ -52,7 +52,7 @@ const renderMessageItem = ({ item }) => (
     style={styles.messageItem}
     onPress={() => router.push({
       pathname: '../chatscreen',
-      params: { userId, friendId: item.friendId, friendName: item.friendName },
+      params: { userId,username, friendId: item.friendId, friendName: item.friendName },
     })}
   >
     {/* Profile Picture */}

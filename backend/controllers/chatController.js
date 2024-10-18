@@ -101,6 +101,7 @@ exports.getChatRoom = async (req, res) => {
 };
 
 // Get chat messages
+// Get chat messages (only unsent)
 exports.getChatMessages = async (req, res) => {
   const { roomId } = req.params;
 
@@ -113,13 +114,22 @@ exports.getChatMessages = async (req, res) => {
       return res.status(404).json({ message: 'Chat room not found' });
     }
 
-    const formattedMessages = chat.messages.map(message => ({
+    // Filter to get only unsent messages
+    const unsentMessages = chat.messages.filter(message => message.status === 'pending');
+    
+    console.log(`Fetched unsent messages for room ${roomId}:`, unsentMessages);
+
+    const formattedMessages = unsentMessages.map(message => ({
       _id: message._id,
       sender: message.sender._id,
       senderName: message.sender.name,
       encryptedText: message.encryptedText,
       timestamp: message.timestamp,
-      senderPublicKey: message.senderPublicKey
+      senderPublicKey: message.senderPublicKey,
+      status: message.status,
+      type: message.type,
+      fileName: message.fileName || null,  // Include file name for file messages
+      fileType: message.fileType || null,  // Include file type for file messages
     }));
 
     res.status(200).json(formattedMessages);
@@ -131,10 +141,13 @@ exports.getChatMessages = async (req, res) => {
   }
 };
 
+
+
+// Handle sending messages
 // Handle sending messages
 exports.handleSendMessage = async (roomId, message) => {
   try {
-    console.log('Received message:', message);  
+    console.log('Received message:', message);
 
     const userId = getUserIdFromToken(message.sender);
     console.log('Extracted userId from token:', userId);
@@ -152,7 +165,11 @@ exports.handleSendMessage = async (roomId, message) => {
       sender: userId,
       encryptedText: message.encryptedText,
       timestamp: new Date(),
-      senderPublicKey: message.senderPublicKey
+      senderPublicKey: message.senderPublicKey,
+      status: 'pending',  // Initially set the status as 'pending'
+      type: message.type || 'text',  // Handle 'text' or 'image'
+      fileName: message.fileName || null,  // New: File name if it's a file
+      fileType: message.fileType || null,  // New: File type (MIME type)
     };
 
     if (!newMessage.encryptedText || !newMessage.senderPublicKey) {
@@ -161,32 +178,29 @@ exports.handleSendMessage = async (roomId, message) => {
 
     console.log('Validated new message:', newMessage);
 
+    // Push the new message into the chat's message array and save the chat
     chat.messages.push(newMessage);
-    console.log('Messages after push:', chat.messages);
+    const updatedChat = await chat.save();  // Save the chat with the new message
 
-    // Validate all messages before saving
-    chat.messages.forEach((msg, index) => {
-      if (!msg.encryptedText || !msg.senderPublicKey) {
-        throw new Error(`Message at index ${index} is incomplete: encryptedText or senderPublicKey is missing`);
-      }
-    });
+    // Get the saved message (the last message in the chat)
+    const savedMessage = updatedChat.messages[updatedChat.messages.length - 1];
 
-    await chat.save();
-    console.log('Chat saved successfully');
+    if (!savedMessage._id) {
+      throw new Error('Message ID is undefined after saving');
+    }
 
-    const populatedChat = await Chat.findById(roomId).populate('messages.sender', 'publicKey name');
-    console.log('Populated Chat:', populatedChat);
-
-    const latestMessage = populatedChat.messages[populatedChat.messages.length - 1];
-    console.log('Latest Message:', latestMessage);
-
+    // Return the saved message (with 'pending' status) for broadcasting
     return {
-      _id: latestMessage._id,
-      sender: latestMessage.sender._id,
-      senderName: latestMessage.sender.name,
-      encryptedText: latestMessage.encryptedText,
-      timestamp: latestMessage.timestamp,
-      senderPublicKey: latestMessage.senderPublicKey
+      _id: savedMessage._id,
+      roomId: roomId,  
+      sender: savedMessage.sender,
+      encryptedText: savedMessage.encryptedText,
+      timestamp: savedMessage.timestamp,
+      senderPublicKey: savedMessage.senderPublicKey,
+      status: savedMessage.status,  // 'pending' status
+      type: savedMessage.type,  // Include message type
+      fileName: savedMessage.fileName || null,  // Include file name if applicable
+      fileType: savedMessage.fileType || null,  // Include file type if applicable
     };
   } catch (error) {
     console.error('Error handling send message:', error.message);
@@ -194,7 +208,33 @@ exports.handleSendMessage = async (roomId, message) => {
   }
 };
 
-// Get user's chat list
+// Mark a message as 'sent' after delivery
+exports.markMessageAsSent = async (req, res) => {
+  const { roomId, messageId } = req.params;
+
+  try {
+    const chat = await Chat.findById(roomId);
+    if (!chat) {
+      return res.status(404).json({ message: 'Chat room not found' });
+    }
+
+    const message = chat.messages.id(messageId);
+    if (!message) {
+      return res.status(404).json({ message: 'Message not found' });
+    }
+
+    // Mark the message as 'sent'
+    message.status = 'sent';
+    await chat.save();
+
+    res.status(200).json({ message: 'Message marked as sent' });
+  } catch (error) {
+    res.status(500).json({ message: 'Server Error', error: error.message });
+  }
+};
+
+
+
 exports.getUserChats = async (req, res) => {
   const userId = req.user._id;
 
@@ -208,7 +248,11 @@ exports.getUserChats = async (req, res) => {
     .sort({ 'messages.timestamp': -1 });
 
     const formattedChats = chats.map((chat) => {
-      const lastMessage = chat.messages[chat.messages.length - 1];
+      // Fetch the last message that has been sent
+      const lastMessage = chat.messages
+        .filter(message => message.status === 'sent') // Only get sent messages
+        .pop();
+
       const friend = chat.participants.find(
         p => p._id.toString() !== userId.toString()
       );
@@ -219,10 +263,10 @@ exports.getUserChats = async (req, res) => {
         friendName: friend.name,
         friendPublicKey: friend.publicKey,
         lastMessage: {
-          encryptedText: lastMessage.encryptedText,
-          senderPublicKey: lastMessage.senderPublicKey,
-          timestamp: lastMessage.timestamp,
-          sender: lastMessage.sender._id
+          encryptedText: lastMessage?.encryptedText || 'No messages yet',
+          senderPublicKey: lastMessage?.senderPublicKey || null,
+          timestamp: lastMessage?.timestamp || null,
+          sender: lastMessage?.sender._id || null
         }
       };
     });
@@ -235,3 +279,5 @@ exports.getUserChats = async (req, res) => {
     });
   }
 };
+
+

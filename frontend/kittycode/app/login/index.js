@@ -16,7 +16,7 @@ import * as Keychain from 'react-native-keychain';
 import { generateKeyPair, getPrivateKey } from "../utils/crypto";
 import { encode as encodeBase64 } from "@stablelib/base64";
 // const BASE_URL = "http://3.26.156.142:3000";  // Backend URL
-const BASE_URL = "https://b57d-122-163-78-156.ngrok-free.app";
+const BASE_URL = "https://47cc-2401-4900-1c01-de12-10b7-f80a-e848-e9d.ngrok-free.app";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
