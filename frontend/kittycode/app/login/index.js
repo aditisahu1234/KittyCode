@@ -13,10 +13,11 @@ import { AntDesign, FontAwesome } from "@expo/vector-icons";
 import { useFonts } from "expo-font";
 import { useRouter } from "expo-router";
 import * as Keychain from 'react-native-keychain';
+import EncryptedStorage from 'react-native-encrypted-storage';
 import { generateKeyPair, getPrivateKey } from "../utils/crypto";
 import { encode as encodeBase64 } from "@stablelib/base64";
 // const BASE_URL = "http://3.26.156.142:3000";  // Backend URL
-const BASE_URL = "https://47cc-2401-4900-1c01-de12-10b7-f80a-e848-e9d.ngrok-free.app";
+const BASE_URL = "https://0e3c-152-58-144-57.ngrok-free.app";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
@@ -49,7 +50,25 @@ export default function LoginScreen() {
       if (data.success) {
         Alert.alert("Success", "Login successful");
         console.log("UserId:", data.token);
-  
+        
+        // Store the token and username in Encrypted Storage
+        await EncryptedStorage.setItem(
+          'user_credentials',
+          JSON.stringify({ token: data.token, username: data.username })
+        );
+        
+        const userCredentials = await EncryptedStorage.getItem('user_credentials');
+        
+        if (userCredentials) {
+          const { token, username } = JSON.parse(userCredentials);
+
+          if (token && username) {
+            // If credentials exist, navigate to the home screen
+            console.log("token :", token);
+            console.log("username :", username);
+          }
+        }
+
         // Retrieve stored private key from Keychain
         let storedPrivateKey = await getPrivateKey(data.username);
   

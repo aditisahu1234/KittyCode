@@ -1,5 +1,4 @@
 // File: screens/ProfileScreen.js
-
 import React from 'react';
 import { View, Text, Image, TouchableOpacity, StyleSheet, SafeAreaView, Alert } from 'react-native';
 import { Ionicons } from '@expo/vector-icons'; // Icons for settings and log out
