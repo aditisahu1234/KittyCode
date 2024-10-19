@@ -16,8 +16,8 @@ import * as Keychain from 'react-native-keychain';
 import EncryptedStorage from 'react-native-encrypted-storage';
 import { generateKeyPair, getPrivateKey } from "../utils/crypto";
 import { encode as encodeBase64 } from "@stablelib/base64";
-// const BASE_URL = "http://3.26.156.142:3000";  // Backend URL
-const BASE_URL = "https://0e3c-152-58-144-57.ngrok-free.app";
+const BASE_URL = "http://192.168.225.62:3000";  // Backend URL
+// const BASE_URL = "https://4d6a-2401-4900-3de6-9762-1181-3588-71f2-7985.ngrok-free.app";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
@@ -144,8 +144,8 @@ export default function LoginScreen() {
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.backButton}>
-        <AntDesign name="arrowleft" size={24} color="#d1ff00" />
+      <TouchableOpacity style={styles.backButton} onPress={() => router.push('/account')}>
+        <FontAwesome name="arrow-left" size={24} color="#fff" />
       </TouchableOpacity>
 
       <View style={styles.header}>
@@ -185,9 +185,7 @@ export default function LoginScreen() {
         disabled={loading}
       >
         <LinearGradient
-          colors={["#ff00ff", "#ffd700"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+          colors={["#FC80D1", "#C6FE4E"]}
           style={styles.gradientButton}
         >
           {loading ? (
@@ -222,8 +220,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   backButton: {
-    position: "absolute",
-    top: 40,
+    position: 'absolute',
+    top: 50,
     left: 20,
   },
   header: {
@@ -277,7 +275,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   loginButtonText: {
-    color: "#fff",
+    color: "#000",
     fontSize: 16,
     fontWeight: "bold",
   },

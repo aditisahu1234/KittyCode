@@ -5,12 +5,14 @@ import { useFonts } from 'expo-font';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Link } from 'expo-router';
 
+import GradientText from '@/screens/gradient';
+
 export default function SplashScreen() {
   const [loaded, error] = useFonts({
     'Poppins-Regular': require('../../assets/fonts/Poppins-Regular.ttf'),
     'Poppins-SemiBold': require('../../assets/fonts/Poppins-SemiBold.ttf'),
     'Poppins-Bold': require('../../assets/fonts/Poppins-Bold.ttf'),
-    'StickNoBills': require('../../assets/fonts/StickNoBills.ttf'),
+    'StickNoBills': require('../../assets/fonts/StickNoBills-SemiBold.ttf'),
   });
 
   /* Handle font loading */
@@ -18,18 +20,19 @@ export default function SplashScreen() {
 
   return (
     <View style={styles.container}>
-      {/* "Welcome to" Text */}
       <Text style={styles.title}>Welcome to</Text>
 
+      <GradientText style={styles.brand} text="KittyCode"/>
+      
       {/* KittyCode Text with Gradient */}
-      <LinearGradient
+      {/* <LinearGradient
         style={styles.brandContainer}
         colors={["#FC80D1", "#C6FE4E"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 0 }}
       >
         <Text style={styles.brand}>KittyCode</Text>
-      </LinearGradient>
+      </LinearGradient> */}
 
       {/* Description Text */}
       <Text style={styles.description}>
@@ -51,10 +54,8 @@ export default function SplashScreen() {
 
       {/* Get Started Button with the original gradient */}
       <LinearGradient
-        colors={["#FC80D1", "#8F00FF", "#0F00FF"]}
+        colors={["#FC80D1", "#C6FE4E"]} 
         style={styles.button}
-        start={{ x: 0.9, y: 0.0 }}
-        end={{ x: 0.1, y: 1.0 }}
       >
         <Link href={'../account'} style={styles.buttonText}>
           Get Started
@@ -73,21 +74,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   title: {
-    fontSize: 36,
+    fontSize: 44,
     fontFamily: 'Poppins-SemiBold',
-    color: '#C6FE4E', // Yellow color for the "Welcome to"
-    fontWeight: '600',
-    marginBottom: 5, // Minor spacing below
+    color: '#C6FE4E', // Yellow color for the "Welcome to",
   },
-  brandContainer: {
-    paddingVertical: 5,
-    paddingHorizontal: 10,
-    borderRadius: 10,
-    marginBottom: 20,
-  },
+
   brand: {
     fontSize: 60, // Larger size for prominent "KittyCode"
-    fontWeight: '700',
+    fontWeight: '600',
     color: '#ffffff',
     fontFamily: 'StickNoBills',
     textAlign: 'center',
@@ -126,11 +120,11 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 100,
     borderRadius: 25, // More rounded button corners
-    alignItems: 'center',
+    alignItems: 'center'
   },
   buttonText: {
     fontFamily: 'Poppins-SemiBold',
-    color: '#ffffff', // White text for the button
+    color: '#000', // White text for the button
     fontSize: 20,
     fontWeight: 'bold',
   },

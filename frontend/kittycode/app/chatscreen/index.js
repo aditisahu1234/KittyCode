@@ -35,7 +35,7 @@ import FileViewer from 'react-native-file-viewer';
 import { openRealm } from '../utils/realmManager';
 
 
-const saveMessageToRealm = async (message) => {
+const saveMessageToRealm = async (message, userId) => {
   const realm = await openRealm();
   try {
     console.log('Attempting to save message to Realm:', message); // Logging the message before saving
@@ -63,7 +63,7 @@ const saveMessageToRealm = async (message) => {
 };
 
 
-const getMessagesFromRealm = async (roomId) => {
+const getMessagesFromRealm = async (roomId, userId) => {
   const realm = await openRealm();
 
   try {
@@ -122,7 +122,7 @@ const markMessageAsSent = async (roomId, messageId, userId) => {
 };
 
 
-const BASE_URL = "https://0e3c-152-58-144-57.ngrok-free.app";
+const BASE_URL = "https://4d6a-2401-4900-3de6-9762-1181-3588-71f2-7985.ngrok-free.app";
 const socket = io(BASE_URL, {
   autoConnect: false,
   reconnectionAttempts: 3,
@@ -205,7 +205,7 @@ const ChatScreen = () => {
         }
   
         // Load messages from Realm first
-        const localMessages = await getMessagesFromRealm(data._id);
+        const localMessages = await getMessagesFromRealm(data._id, userId);
         setMessages(localMessages);
   
         socket.connect();
@@ -266,10 +266,9 @@ const ChatScreen = () => {
             // Save the decrypted message to Realm with `username`
             await saveMessageToRealm({
               ...messageForLocal,
-              userId: userId,              // Add userId when saving
               roomId: roomId,
               timestamp: message.timestamp,
-            });
+            },userId);
             
             // If the message status is still pending, mark it as sent
           if (message.status === 'pending') {
@@ -339,7 +338,7 @@ const ChatScreen = () => {
   
         // Save the decrypted message to Realm
         // await saveMessageToRealm(messageForLocal);
-        await saveMessageToRealm(finalMessage);
+        await saveMessageToRealm(finalMessage, userId);
         console.log(`Marking message as sent - roomId: ${roomId}, messageId: ${message._id}`);
 
         setMessages(prevMessages => [...prevMessages, finalMessage]);
@@ -411,7 +410,7 @@ const ChatScreen = () => {
           type: 'text'
         };
 
-        await saveMessageToRealm(messageForLocal);
+        await saveMessageToRealm(messageForLocal, userId);
         setMessages((prevMessages) => [...prevMessages, messageForLocal]);
         setInputMessage('');
       });
@@ -466,7 +465,7 @@ const ChatScreen = () => {
           type: 'image'
         };
 
-        await saveMessageToRealm(messageForLocal);
+        await saveMessageToRealm(messageForLocal, userId);
         setMessages((prevMessages) => [...prevMessages, messageForLocal]);
       });
 
@@ -537,7 +536,7 @@ const ChatScreen = () => {
           fileType: fileType
         };
 
-        await saveMessageToRealm(messageForLocal);
+        await saveMessageToRealm(messageForLocal, userId);
         setMessages(prevMessages => [...prevMessages, messageForLocal]);
         console.log('File message processed successfully');
       });

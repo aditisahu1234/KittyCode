@@ -13,29 +13,32 @@ const MessagesScreen = ({ userId, username }) => {
     const fetchChatsFromRealm = async () => {
       try {
         const realm = await openRealm();
-  
+    
         // Fetch all friends
         const friends = realm.objects('Friend').filtered('userId == $0', userId);
-  
+    
         // Fetch the latest message for each friend based on roomId
         const chatData = friends.map((friend) => {
           const latestMessage = realm
             .objects('Message')
             .filtered('roomId == $0', friend.roomId)
             .sorted('timestamp', true)[0];  // Get the latest message by sorting by timestamp
-  
-          return {
+    
+          return latestMessage ? {
             friendId: friend._id,
             friendName: friend.name,
-            avatar: friend.avatar || 'https://via.placeholder.com/50', // Replace with actual avatar field if available
-            lastMessage: latestMessage ? {
+            avatar: friend.avatar || 'https://via.placeholder.com/50',
+            lastMessage: {
               encryptedText: latestMessage.text,
               timestamp: latestMessage.timestamp,
-            } : null,
+            },
             unread: false, // You might need to add logic for unread status
-          };
-        });
-  
+          } : null;
+        }).filter(Boolean); // Remove null entries (chats without messages)
+    
+        // Sort chatData by the most recent message
+        chatData.sort((a, b) => b.lastMessage.timestamp - a.lastMessage.timestamp);
+    
         setMessagesData(chatData);
       } catch (error) {
         console.error('Error fetching chat data from Realm:', error);
@@ -107,7 +110,8 @@ const renderMessageItem = ({ item }) => (
     <View style={styles.container}>
       <FlatList
         data={messagesData}
-        keyExtractor={(item) => item._id || item.id}
+        // keyExtractor={(item) => item._id || item.id}
+        keyExtractor={(item) => item.friendId}
         renderItem={renderMessageItem}
         contentContainerStyle={styles.messageList}
       />

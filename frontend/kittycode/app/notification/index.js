@@ -76,7 +76,7 @@ const NotificationScreen = () => {
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.backButton} onPress={() => router.push('/homescreen')}>
+      <TouchableOpacity style={styles.backButton} onPress={() => router.back()}>
         <FontAwesome name="arrow-left" size={24} color="#fff" />
       </TouchableOpacity>
 
@@ -125,6 +125,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 50,
     left: 20,
+    zIndex: 1000, // Ensure it's on top of other elements
   },
   title: {
     fontFamily:"Poppins-SemiBold",
