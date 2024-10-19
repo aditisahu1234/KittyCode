@@ -6,7 +6,7 @@ import { useRouter } from 'expo-router';
 import { FontAwesome } from '@expo/vector-icons';
 
 const BASE_URL = "https://4d6a-2401-4900-3de6-9762-1181-3588-71f2-7985.ngrok-free.app";
-
+// const BASE_URL = "http://3.26.156.142:3000";
 export default function CreateAccountScreen() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');

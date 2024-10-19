@@ -121,7 +121,7 @@ const markMessageAsSent = async (roomId, messageId, userId) => {
   }
 };
 
-
+// const BASE_URL = "http://3.26.156.142:3000";
 const BASE_URL = "https://4d6a-2401-4900-3de6-9762-1181-3588-71f2-7985.ngrok-free.app";
 const socket = io(BASE_URL, {
   autoConnect: false,
