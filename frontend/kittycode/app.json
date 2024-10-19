@@ -23,6 +23,7 @@
       },
       "package": "com.priyanshu_samal.kittycode",
       "permissions": [
+        "android.permission.RECORD_AUDIO",
         "android.permission.WRITE_EXTERNAL_STORAGE",
         "android.permission.READ_EXTERNAL_STORAGE",
         "android.permission.INTERNET"

@@ -11,6 +11,7 @@
   "license": "ISC",
   "dependencies": {
     "@stablelib/base64": "^2.0.0",
+    "argon2": "^0.41.1",
     "bcryptjs": "^2.4.3",
     "body-parser": "^1.20.3",
     "dotenv": "^16.4.5",

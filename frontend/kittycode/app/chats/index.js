@@ -1,43 +1,56 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, FlatList, TouchableOpacity, Image, StyleSheet, Alert } from 'react-native';
 import { useRouter } from 'expo-router';
+import { openRealm } from '../utils/realmManager';
 
-const MessagesScreen = ({ userId }) => {
+const MessagesScreen = ({ userId, username }) => {
   const router = useRouter();
   const [messagesData, setMessagesData] = useState([]);
   const [loading, setLoading] = useState(true);
 
   // Fetch messages from the backend
   useEffect(() => {
-    const fetchChats = async () => {
+    const fetchChatsFromRealm = async () => {
       try {
-        const response = await fetch(`https://b57d-122-163-78-156.ngrok-free.app/api/chats/user`, {
-          headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${userId}`,
-          },
-        });
-
-        if (!response.ok) {
-          const errorText = await response.text();
-          console.error('Error fetching chat data:', errorText);
-          Alert.alert('Error', 'Failed to fetch chats.');
-          setLoading(false);
-          return;
-        }
-
-        const data = await response.json();
-        setMessagesData(data);
+        const realm = await openRealm();
+    
+        // Fetch all friends
+        const friends = realm.objects('Friend').filtered('userId == $0', userId);
+    
+        // Fetch the latest message for each friend based on roomId
+        const chatData = friends.map((friend) => {
+          const latestMessage = realm
+            .objects('Message')
+            .filtered('roomId == $0', friend.roomId)
+            .sorted('timestamp', true)[0];  // Get the latest message by sorting by timestamp
+    
+          return latestMessage ? {
+            friendId: friend._id,
+            friendName: friend.name,
+            avatar: friend.avatar || 'https://via.placeholder.com/50',
+            lastMessage: {
+              encryptedText: latestMessage.text,
+              timestamp: latestMessage.timestamp,
+            },
+            unread: false, // You might need to add logic for unread status
+          } : null;
+        }).filter(Boolean); // Remove null entries (chats without messages)
+    
+        // Sort chatData by the most recent message
+        chatData.sort((a, b) => b.lastMessage.timestamp - a.lastMessage.timestamp);
+    
+        setMessagesData(chatData);
       } catch (error) {
-        console.log('Error fetching chat data:', error.message);
-        Alert.alert('Error', 'Failed to fetch chat data.');
+        console.error('Error fetching chat data from Realm:', error);
+        Alert.alert('Error', 'Failed to fetch chats.');
       } finally {
         setLoading(false);
       }
     };
-
-    fetchChats();
+  
+    fetchChatsFromRealm(); // Call the new function
   }, [userId]);
+  
 
   // Format timestamp for display
   const formatTimestamp = (timestamp) => {
@@ -52,7 +65,7 @@ const renderMessageItem = ({ item }) => (
     style={styles.messageItem}
     onPress={() => router.push({
       pathname: '../chatscreen',
-      params: { userId, friendId: item.friendId, friendName: item.friendName },
+      params: { userId,username, friendId: item.friendId, friendName: item.friendName },
     })}
   >
     {/* Profile Picture */}
@@ -97,7 +110,8 @@ const renderMessageItem = ({ item }) => (
     <View style={styles.container}>
       <FlatList
         data={messagesData}
-        keyExtractor={(item) => item._id || item.id}
+        // keyExtractor={(item) => item._id || item.id}
+        keyExtractor={(item) => item.friendId}
         renderItem={renderMessageItem}
         contentContainerStyle={styles.messageList}
       />

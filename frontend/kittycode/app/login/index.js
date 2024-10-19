@@ -7,21 +7,26 @@ import {
   StyleSheet,
   Alert,
   ActivityIndicator,
+  Modal,
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { AntDesign, FontAwesome } from "@expo/vector-icons";
+import { FontAwesome } from "@expo/vector-icons";
 import { useFonts } from "expo-font";
 import { useRouter } from "expo-router";
 import * as Keychain from 'react-native-keychain';
+import EncryptedStorage from 'react-native-encrypted-storage';
+import { GoogleSignin, statusCodes } from '@react-native-google-signin/google-signin';  // Use Google Signin
 import { generateKeyPair, getPrivateKey } from "../utils/crypto";
 import { encode as encodeBase64 } from "@stablelib/base64";
-// const BASE_URL = "http://3.26.156.142:3000";  // Backend URL
-const BASE_URL = "https://b57d-122-163-78-156.ngrok-free.app";
+
+const BASE_URL = "http://192.168.137.14:3000";  // Backend URL
+// const BASE_URL = "http://3.26.156.142:3000";
 
 export default function LoginScreen() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false); // Modal for second stage
   const router = useRouter();
 
   const [loaded] = useFonts({
@@ -30,103 +35,107 @@ export default function LoginScreen() {
     "Poppins-Bold": require("../../assets/fonts/Poppins-Bold.ttf"),
   });
 
+  // Initialize Google Sign-In in useEffect
+  useEffect(() => {
+    GoogleSignin.configure({
+      webClientId: '89431481616-edhm1hgqcf181a1mrqk0cpeon9k1i6ud.apps.googleusercontent.com', // Replace with your actual Google web client ID
+      offlineAccess: true, // If you need access to the user's refresh token
+    });
+  }, []);
 
   const handleLogin = async () => {
     setLoading(true);
-  
     try {
       const response = await fetch(`${BASE_URL}/api/auth/login`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ email, password }), // Send email and password to backend
+        body: JSON.stringify({ email, password }),
       });
-  
-      const data = await response.json(); // Parse response JSON
+
+      const data = await response.json();
       setLoading(false);
-  
+
       if (data.success) {
         Alert.alert("Success", "Login successful");
-        console.log("UserId:", data.token);
-  
-        // Retrieve stored private key from Keychain
+        
+        await EncryptedStorage.setItem(
+          'user_credentials',
+          JSON.stringify({ token: data.token, username: data.username })
+        );
+
         let storedPrivateKey = await getPrivateKey(data.username);
-  
-        console.log("Stored Private Key:", storedPrivateKey); // Log the stored private key
-  
+
         if (!storedPrivateKey) {
-          console.log("No existing private key found. Generating new key pair.");
-  
-          // Private key doesn't exist, generate a new key pair
           const keyPair = generateKeyPair();
-  
-          // Log the generated private key
-          console.log("Generated Private Key:", keyPair.secretKey);
-  
-          try {
-            // Store the private key in Keychain
-            await Keychain.setGenericPassword(
-              data.username,  // Use token directly as the "username"
-              encodeBase64(keyPair.secretKey)  // Store the private key as the "password" in base64 format
-            );
-            console.log("Private key stored successfully!");
-          } catch (storeError) {
-            console.error("Error storing private key:", storeError);
-            Alert.alert(
-              "Storage Error",
-              "Failed to secure your encryption keys. Please try again."
-            );
-            return;
-          }
-  
-          // Send the public key to the backend after successful login
+          await Keychain.setGenericPassword(
+            data.username,
+            encodeBase64(keyPair.secretKey)
+          );
           await fetch(`${BASE_URL}/api/auth/store-public-key`, {
             method: "POST",
             headers: {
               "Content-Type": "application/json",
-              Authorization: `Bearer ${data.token}`, // Send the token for authentication
+              Authorization: `Bearer ${data.token}`,
             },
             body: JSON.stringify({
-              publicKey: encodeBase64(keyPair.publicKey), // Send the public key in the body
+              publicKey: encodeBase64(keyPair.publicKey),
             }),
           });
-  
-          storedPrivateKey = keyPair.secretKey; // Set the stored private key to the newly generated one
-        } else {
-          console.log("Private key already exists. Reusing the existing key.");
+          storedPrivateKey = keyPair.secretKey;
         }
-  
-        // Log the retrieved or newly generated private key
-        console.log("Retrieved Private Key:", storedPrivateKey);
-  
-        if (storedPrivateKey) {
-          // Navigate to HomeScreen, passing both token and username
-          router.push({
-            pathname: "../homescreen",
-            params: { userId: data.token, username: data.username },
-          });
-        } else {
-          Alert.alert("Error", "Failed to retrieve private key");
-        }
+
+        // Prompt for second-stage verification
+        setModalVisible(true); // Open modal for Google verification
       } else {
-        Alert.alert("Error", data.message); // Show error message from the backend
+        Alert.alert("Error", data.message);
       }
     } catch (error) {
       setLoading(false);
-      Alert.alert("Error", "An error occurred. Please try again."); // General error message
+      Alert.alert("Error", "An error occurred. Please try again.");
     }
+  };
+
+  const handleGoogleSignIn = async () => {
+    try {
+      await GoogleSignin.hasPlayServices();
+      const userInfo = await GoogleSignin.signIn();
+      Alert.alert("Google Verification", "Google account verified.");
+      setModalVisible(false);
+    } catch (error) {
+      // Catch and show the error but continue with login
+      if (error.code === statusCodes.SIGN_IN_CANCELLED) {
+        // Alert.alert("Google Sign-In", "Sign-in was cancelled.");
+      } else if (error.code === statusCodes.IN_PROGRESS) {
+        // Alert.alert("Google Sign-In", "Sign-in is in progress.");
+      } else if (error.code === statusCodes.PLAY_SERVICES_NOT_AVAILABLE) {
+        // Alert.alert("Google Sign-In", "Play services not available.");
+      } else {
+        console.error("Google sign-in error:", error);
+        // Alert.alert("Error", "Google sign-in failed, but proceeding to login.");
+      }
+      setModalVisible(false);  // Close the modal regardless of the error
+    }
+  
+    // Proceed to the home screen after handling Google Sign-In or error
+    const userCredentials = await EncryptedStorage.getItem('user_credentials');
+    const { token, username } = JSON.parse(userCredentials);
+    router.push({
+      pathname: "../homescreen",
+      params: { userId: token, username: username },
+    });
   };
   
 
   if (!loaded) {
-    return <ActivityIndicator size="large" color="#0000ff" />; // Show loader if fonts aren't loaded
+    return <ActivityIndicator size="large" color="#0000ff" />;
   }
 
   return (
     <View style={styles.container}>
-      <TouchableOpacity style={styles.backButton}>
-        <AntDesign name="arrowleft" size={24} color="#d1ff00" />
+      <TouchableOpacity style={styles.backButton} onPress={() => router.push('/account')}>
+        <FontAwesome name="arrow-left" size={24} color="#fff" />
       </TouchableOpacity>
 
       <View style={styles.header}>
@@ -166,9 +175,7 @@ export default function LoginScreen() {
         disabled={loading}
       >
         <LinearGradient
-          colors={["#ff00ff", "#ffd700"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
+          colors={["#FC80D1", "#C6FE4E"]}
           style={styles.gradientButton}
         >
           {loading ? (
@@ -179,18 +186,25 @@ export default function LoginScreen() {
         </LinearGradient>
       </TouchableOpacity>
 
-      <Text style={styles.orLoginWith}>Or Login with</Text>
-      <View style={styles.socialContainer}>
-        <TouchableOpacity>
-          <AntDesign name="google" size={40} color="#4C8BF5" />
-        </TouchableOpacity>
-        <TouchableOpacity>
-          <AntDesign name="apple1" size={40} color="#000" />
-        </TouchableOpacity>
-        <TouchableOpacity>
-          <FontAwesome name="facebook-square" size={40} color="#3b5998" />
-        </TouchableOpacity>
-      </View>
+      {/* Second-stage verification modal */}
+      <Modal
+        visible={modalVisible}
+        transparent={true}
+        animationType="slide"
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalText}>Please verify your identity with Google</Text>
+            <TouchableOpacity
+              style={styles.googleButton}
+              onPress={handleGoogleSignIn}
+            >
+              <FontAwesome name="google" size={40} color="#4C8BF5" />
+              <Text style={styles.googleText}>Continue with Google</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -203,8 +217,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   backButton: {
-    position: "absolute",
-    top: 40,
+    position: 'absolute',
+    top: 50,
     left: 20,
   },
   header: {
@@ -258,18 +272,36 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   loginButtonText: {
-    color: "#fff",
+    color: "#000",
     fontSize: 16,
     fontWeight: "bold",
   },
-  orLoginWith: {
-    textAlign: "center",
-    color: "#fff",
-    fontSize: 16,
+  modalContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    backgroundColor: "rgba(0,0,0,0.5)",
+  },
+  modalContent: {
+    backgroundColor: "#fff",
+    padding: 20,
+    borderRadius: 10,
+    alignItems: "center",
+  },
+  modalText: {
+    fontSize: 18,
     marginBottom: 20,
   },
-  socialContainer: {
+  googleButton: {
     flexDirection: "row",
-    justifyContent: "space-around",
+    alignItems: "center",
+    backgroundColor: "#fff",
+    padding: 10,
+    borderRadius: 5,
+  },
+  googleText: {
+    marginLeft: 10,
+    fontSize: 16,
+    color: "#4C8BF5",
   },
 });
